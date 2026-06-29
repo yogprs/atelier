@@ -7,6 +7,7 @@ import { formatDate, formatTime } from "@/utils/dateFormat";
 import { useAuthStore } from "@/stores/auth";
 import type { ApiResponse } from "@/types/general";
 import { toTitleCase } from "@/utils/stringFormat";
+import { Image } from "primevue";
 
 const auth = useAuthStore();
 
@@ -114,7 +115,7 @@ watch(
         <!-- System Message -->
         <div
           v-if="message?.message_type === 'system'"
-          class="w-full flex items-center my-2"
+          class="w-full flex items-center justify-center my-2"
         >
           <span class="text-xs font-medium">
             {{ message?.content }}
@@ -127,17 +128,67 @@ watch(
         >
           <!-- @click="toggleMessageSelection(message?.id)" -->
           <div
+            v-if="message?.message_type === 'file'"
             @contextmenu.prevent="toggleMessageSelection(message?.id)"
             :class="`max-w-[80%] min-w-30 px-3 pt-1 pb-2 rounded-2xl cursor-pointer border border-neutral-300 shadow-sm ${message?.sender_id === auth?.user?.user_id ? 'bg-primary-lighter rounded-br-sm text-white' : 'bg-neutral-white rounded-bl-sm text-black'}`"
           >
-            <div v-if="message?.sender_id !== auth?.user?.user_id" class="">
+            <div v-if="message?.sender_id !== auth?.user?.user_id">
               <span class="text-xs font-semibold text-neutral-textMain">
                 {{ message?.sender_name }}
               </span>
             </div>
 
             <div>
+              <!-- Content File -->
               <span
+                :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white' : 'text-primary-base'}`"
+              >
+                {{ message?.content?.replace("📎 ", "") || "File" }}
+              </span>
+            </div>
+          </div>
+          <div
+            v-else-if="
+              message?.message_type === 'image' && message?.attachments
+            "
+            @contextmenu.prevent="toggleMessageSelection(message?.id)"
+            :class="`max-w-[80%] min-w-30 px-3 pt-1 pb-2 rounded-2xl cursor-pointer border border-neutral-300 shadow-sm ${message?.sender_id === auth?.user?.user_id ? 'bg-primary-lighter rounded-br-sm text-white' : 'bg-neutral-white rounded-bl-sm text-black'}`"
+          >
+            <div v-if="message?.sender_id !== auth?.user?.user_id">
+              <span class="text-xs font-semibold text-neutral-textMain">
+                {{ message?.sender_name }}
+              </span>
+            </div>
+
+            <div>
+              <!-- Content Image -->
+              <div
+                :class="`${message?.attachments?.length > 1 ? 'grid grid-cols-2' : 'grid grid-cols-1'}  gap-1 rounded-xl overflow-hidden`"
+              >
+                <div
+                  v-if="message?.attachments?.length > 0"
+                  v-for="(image, index) in message?.attachments?.slice(0, 4)"
+                  :key="index"
+                  :class="`${message?.attachments?.length > 1 ? 'w-25! h-25! rounded-lg!' : 'w-45! h-45! rounded-xl!'}`"
+                >
+                  <Image
+                    :src="image"
+                    :alt="image"
+                    preview
+                    :pt="{
+                      root: {
+                        class: 'w-full h-full',
+                      },
+                      image: {
+                        class: 'w-full h-full object-cover',
+                      },
+                    }"
+                  />
+                </div>
+              </div>
+              <!-- Content Message -->
+              <span
+                v-if="message?.content"
                 :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white' : 'text-primary-base'}`"
               >
                 {{ message?.content }}
@@ -149,6 +200,30 @@ watch(
                   {{ formatTime(message?.timestamp) }}
                 </span>
               </div>
+            </div>
+          </div>
+          <div
+            v-else-if="message?.content && message?.message_type !== 'system'"
+            @contextmenu.prevent="toggleMessageSelection(message?.id)"
+            :class="`max-w-[80%] min-w-30 px-3 pt-1 pb-2 rounded-2xl cursor-pointer border border-neutral-300 shadow-sm ${message?.sender_id === auth?.user?.user_id ? 'bg-primary-lighter rounded-br-sm text-white' : 'bg-neutral-white rounded-bl-sm text-black'}`"
+          >
+            <div v-if="message?.sender_id !== auth?.user?.user_id">
+              <span class="text-xs font-semibold text-neutral-textMain">
+                {{ message?.sender_name }}
+              </span>
+            </div>
+            <!-- Content Message -->
+            <span
+              :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white' : 'text-primary-base'}`"
+            >
+              {{ message?.content }}
+            </span>
+            <div class="flex flex-col items-end mt-px">
+              <span
+                :class="`text-[10px] ${message?.sender_id === auth?.user?.user_id ? 'text-[#ffffff99]' : 'text-neutral-textMuted'}`"
+              >
+                {{ formatTime(message?.timestamp) }}
+              </span>
             </div>
           </div>
         </div>
