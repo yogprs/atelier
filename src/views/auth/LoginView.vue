@@ -20,10 +20,12 @@ import apiClient from "@/lib/apiClient";
 import type { BodyLogin, LoginResponse } from "@/types/auth";
 import { useAuthStore } from "@/stores/auth";
 import { useRouter } from "vue-router";
+import { useWebSocketStore } from "@/stores/websocket";
 
 const toast = useToast();
 const auth = useAuthStore();
 const router = useRouter();
+const websocket = useWebSocketStore();
 
 const initialValues = reactive({
   email: "",
@@ -81,7 +83,6 @@ const handleLogin = async (values: BodyLogin) => {
       "/users/login",
       values,
     );
-    console.log("Response", response);
 
     if (!response?.token) {
       toast.add({
@@ -99,6 +100,9 @@ const handleLogin = async (values: BodyLogin) => {
     });
 
     await auth.login(response.token, response.refresh_token);
+
+    websocket.connect();
+
     router.replace("/app/chats");
   } catch (e: any) {
     console.error(e);

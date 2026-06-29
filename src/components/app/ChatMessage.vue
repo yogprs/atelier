@@ -8,6 +8,7 @@ import { useAuthStore } from "@/stores/auth";
 import type { ApiResponse } from "@/types/general";
 import { toTitleCase } from "@/utils/stringFormat";
 import { Image } from "primevue";
+import dayjs from "dayjs";
 
 const auth = useAuthStore();
 
@@ -33,6 +34,17 @@ const toggleMessageSelection = (messageId: string) => {
   selectedMessageIds.value = selectedMessageIds.value?.includes(messageId)
     ? selectedMessageIds.value.filter((id) => id !== messageId)
     : [...(selectedMessageIds.value ?? []), messageId];
+};
+
+const showingDate = (
+  allTimestamp: string[],
+  thisTimestamp: string,
+  index: number,
+) => {
+  const currentDate = dayjs(thisTimestamp).format("YYYY-MM-DD");
+  const previousDate =
+    index > 0 ? dayjs(allTimestamp[index - 1]).format("YYYY-MM-DD") : null;
+  return currentDate !== previousDate;
 };
 
 const scrollToDown = async () => {
@@ -98,9 +110,22 @@ watch(
       ref="scrollMessage"
       class="flex-1 w-full h-full overflow-y-auto scroll-message pb-2"
     >
-      <div :key="message?.id" v-for="message in messages" class="px-4 pt-4">
+      <div
+        :key="message?.id"
+        v-for="(message, index) in messages"
+        class="px-4 pt-4"
+      >
         <!-- Date Separator -->
-        <div class="w-full flex flex-col items-center my-3">
+        <div
+          v-if="
+            showingDate(
+              messages?.map((val) => val?.timestamp) as string[],
+              message?.timestamp,
+              index,
+            )
+          "
+          class="w-full flex flex-col items-center my-3"
+        >
           <div
             class="px-3 py-1 rounded-full bg-[#ffffff14] border border-neutral-300"
           >
