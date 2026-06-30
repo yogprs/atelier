@@ -86,5 +86,9 @@ export const useWebSocketStore = defineStore("websocket", {
         this.socket.send(JSON.stringify(data));
       }
     },
+
+    setLastMessage(msg: BroadcastMessage | null) {
+      this.lastMessage = msg;
+    },
   },
 });
