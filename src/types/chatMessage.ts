@@ -3,6 +3,7 @@ import type { User } from "./user";
 
 export interface ChatMessageProps {
   idRoom: string;
+  idUser: string;
 }
 
 export type RoomDetailHeader = Pick<
@@ -11,6 +12,8 @@ export type RoomDetailHeader = Pick<
 >;
 
 export type UserDetailHeader = Pick<User, "id" | "username" | "avatar">;
+
+export type MessageType = "system" | "text" | "image" | "file";
 
 export interface ChatHeaderProps {
   data: RoomDetailHeader | UserDetailHeader;
@@ -22,7 +25,7 @@ export interface Message {
   sender_id: string;
   sender_name: string;
   content: string;
-  message_type: "system" | "text" | "image" | "file";
+  message_type: MessageType;
   timestamp: string;
   attachments?: string[];
 }
