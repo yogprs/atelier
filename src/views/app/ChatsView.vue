@@ -20,7 +20,8 @@ const selectedRoom = ref<Pick<
   ApiRoom,
   "id" | "target_user_id" | "room_type"
 > | null>();
-const selectedRoomId = ref<string>();
+const selectedRoomId = ref<string | null>();
+const selectedTargetUserId = ref<string | null>();
 const roomDetail = ref<RoomDetail | null>();
 const userDetail = ref<User | null>();
 
@@ -34,6 +35,8 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   if (event.key === "Escape") {
     if (selectedRoom.value) {
       selectedRoom.value = null;
+      selectedRoomId.value = null;
+      selectedTargetUserId.value = null;
     }
   }
 };
@@ -89,6 +92,7 @@ watch(
   () => {
     if (selectedRoom.value?.id === selectedRoomId.value) return;
     selectedRoomId.value = selectedRoom.value?.id;
+    selectedTargetUserId.value = selectedRoom.value?.target_user_id;
     if (selectedRoom.value?.room_type === "group") {
       userDetail.value = null;
       getRoomDetail();
@@ -113,6 +117,20 @@ watch(
 
     if (!msg || !msg.room_id) return;
 
+    if (msg.type === "new_room" && msg.data) {
+      const roomData = msg.data as ApiRoom;
+
+      const index = rooms.value?.findIndex((room) => room.id === roomData.id);
+
+      if (index === -1) {
+        rooms.value = [roomData, ...(rooms.value as ApiRoom[])];
+      } else {
+        rooms.value = rooms.value?.map((room) =>
+          room.id === roomData.id ? roomData : room,
+        );
+      }
+    }
+
     const isChatMessage = [
       "text",
       "image",
@@ -123,21 +141,29 @@ watch(
 
     if (!isChatMessage) return;
 
-    rooms.value = rooms.value?.map((prev) => {
-      if (prev?.id === msg?.room_id) {
-        return {
-          ...prev,
-          last_message: {
-            id: msg?.message_id ?? `temp-${Date.now()}`,
-            content: msg.body ?? "",
-            user_id: msg.sender_id ?? "",
-            message_type: msg.type ?? "text",
-            timestamp: new Date(msg.timestamp ?? Date.now()).toISOString(),
-          },
-        };
-      }
-      return prev;
+    rooms.value = (rooms.value as ApiRoom[]).map((room) => {
+      if (room.id !== msg.room_id) return room;
+
+      return {
+        ...room,
+        last_message: {
+          id: msg.message_id ?? `temp-${Date.now()}`,
+          content: msg.body ?? "",
+          user_id: msg.sender_id ?? "",
+          message_type: msg.type ?? "text",
+          timestamp: new Date(msg.timestamp ?? Date.now()).toISOString(),
+        },
+      };
     });
+
+    const index = (rooms.value as ApiRoom[]).findIndex(
+      (room) => room.id === msg.room_id,
+    );
+
+    if (index !== undefined && index > 0) {
+      const [room] = (rooms.value as ApiRoom[]).splice(index, 1) as ApiRoom[];
+      rooms.value?.unshift(room);
+    }
   },
   {
     immediate: true,
@@ -217,7 +243,7 @@ onUnmounted(() => {
                     class="size-12 overflow-hidden rounded-full border-2 border-slate-200"
                   >
                     <Image
-                      :src="room?.target_avatar_url"
+                      :src="room?.avatar ?? room?.target_avatar_url"
                       :alt="`avatar-${room?.avatar ?? room?.target_username}`"
                       class="size-12 object-cover"
                     />
@@ -272,7 +298,10 @@ onUnmounted(() => {
               }"
             />
 
-            <ChatMessage :id-room="selectedRoomId as string" />
+            <ChatMessage
+              :id-user="selectedTargetUserId as string"
+              :id-room="selectedRoomId as string"
+            />
           </div>
         </div>
       </div>

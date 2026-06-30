@@ -1,16 +1,24 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
-import type { Message, ChatMessageProps } from "@/types/chatMessage";
+import type {
+  Message,
+  ChatMessageProps,
+  MessageType,
+} from "@/types/chatMessage";
 import apiClient from "@/lib/apiClient";
 import type { RoomMessage } from "@/types/room";
 import { formatDate, formatTime } from "@/utils/dateFormat";
 import { useAuthStore } from "@/stores/auth";
 import type { ApiResponse } from "@/types/general";
 import { toTitleCase } from "@/utils/stringFormat";
-import { Image } from "primevue";
+import { Button, Image, InputGroup, InputText, useToast } from "primevue";
 import dayjs from "dayjs";
+import { Icon } from "@iconify/vue";
+import { useWebSocketStore } from "@/stores/websocket";
 
+const toast = useToast();
 const auth = useAuthStore();
+const websocket = useWebSocketStore();
 
 const props = defineProps<ChatMessageProps>();
 const roomId = ref<string | null>();
@@ -21,6 +29,7 @@ const hasMore = ref<boolean>(false);
 const loadingMessage = ref<boolean>(true);
 const selectedMessageIds = ref<string[]>();
 const scrollMessage = ref<any>(null);
+const messageModel = ref<string | null>();
 
 // const handleScroll = (event: any) => {
 //   const el = event.target;
@@ -47,11 +56,76 @@ const showingDate = (
   return currentDate !== previousDate;
 };
 
+const handleSendMessage = async () => {
+  if (!roomId.value) {
+    await createDirectMessage(props?.idUser as string, "text");
+    return;
+  }
+  return await handleSendMessageHaveId();
+};
+
 const scrollToDown = async () => {
   await nextTick();
 
   const el = scrollMessage.value;
   el.scrollTop = el.scrollHeight;
+};
+
+const createDirectMessage = async (
+  userId: string,
+  messageType: MessageType,
+) => {
+  try {
+    const response = await apiClient.post<ApiResponse>("/room/direct", {
+      target_user_id: userId,
+      message_type: messageType,
+      content: messageModel.value,
+    });
+
+    roomId.value = response.data as string;
+    messageModel.value = null;
+  } catch (error) {
+    console.error(error);
+    toast.add({
+      severity: "error",
+      summary: "Failed to create direct message.",
+    });
+  }
+};
+
+const handleSendMessageHaveId = async () => {
+  const hasText = messageModel.value && messageModel.value?.trim().length > 0;
+
+  if (!hasText) return;
+
+  const now = new Date().toISOString();
+
+  const payload = {
+    type: "message_group",
+    room_id: roomId.value as string,
+    data: {
+      room_id: roomId.value,
+      content: messageModel.value,
+      message_type: "text",
+      sender_name: auth.session?.user?.username,
+    },
+  };
+
+  websocket.send(payload);
+
+  const newMessage: Message = {
+    id: `temp-${Date.now()}`,
+    room_id: roomId.value as string,
+    sender_id: auth.session?.user?.user_id || "",
+    sender_name: auth.session?.user?.username || "",
+    content: messageModel.value as string,
+    message_type: "text",
+    timestamp: now,
+  };
+
+  messages.value = [...messages.value!, newMessage];
+
+  messageModel.value = null;
 };
 
 const fetchMessage = async (addtionalParams?: string) => {
@@ -105,7 +179,7 @@ watch(
 </script>
 
 <template>
-  <div class="w-full h-full pb-32">
+  <div class="w-full h-full pb-30">
     <div
       ref="scrollMessage"
       class="flex-1 w-full h-full overflow-y-auto scroll-message pb-2"
@@ -188,7 +262,7 @@ watch(
             <div>
               <!-- Content Image -->
               <div
-                :class="`${message?.attachments?.length > 1 ? 'grid grid-cols-2' : 'grid grid-cols-1'}  gap-1 rounded-xl overflow-hidden`"
+                :class="`${message?.attachments?.length > 1 ? 'grid grid-cols-2' : 'grid grid-cols-1'} gap-1 rounded-xl overflow-hidden pt-2 relative`"
               >
                 <div
                   v-if="message?.attachments?.length > 0"
@@ -209,6 +283,14 @@ watch(
                       },
                     }"
                   />
+                </div>
+                <div
+                  v-if="message?.attachments?.length > 4"
+                  class="absolute right-0 bottom-0 w-25 h-25 rounded-lg flex flex-col justify-center items-center bg-[#00000080]"
+                >
+                  <span class="text-sm font-semibold text-white">
+                    + {{ message?.attachments?.length - 4 }}
+                  </span>
                 </div>
               </div>
               <!-- Content Message -->
@@ -252,6 +334,91 @@ watch(
             </div>
           </div>
         </div>
+      </div>
+    </div>
+    <div class="w-full h-full bg-transparent">
+      <div class="h-12.5 px-4">
+        <InputGroup
+          class="bg-neutral-inputBg! border border-neutral-300 text-neutral-400! rounded-full h-12 overflow-hidden px-2 items-center"
+        >
+          <Button
+            v-tooltip.top="{
+              value: 'Attach',
+              pt: {
+                arrow: {
+                  style: {
+                    borderBottomColor: 'var(--p-primary-color)',
+                  },
+                },
+                text: 'bg-primary! text-primary-contrast! text-sm! font-regular!',
+              },
+            }"
+            unstyled
+            class="flex gap-4 p-2 my-1 items-center rounded-full cursor-pointer transition-all duration-500 hover:bg-[#F0F2FF]"
+          >
+            <template #icon>
+              <span>
+                <Icon icon="material-symbols:add" class="size-6" />
+              </span>
+            </template>
+          </Button>
+
+          <Button
+            v-tooltip.top="{
+              value: 'Emojis, GIFs, Stickers',
+              pt: {
+                arrow: {
+                  style: {
+                    borderBottomColor: 'var(--p-primary-color)',
+                  },
+                },
+                text: 'bg-primary! text-primary-contrast! text-sm! font-regular!',
+              },
+            }"
+            unstyled
+            class="flex gap-4 p-2 my-1 items-center rounded-full cursor-pointer transition-all duration-500 hover:bg-[#F0F2FF]"
+          >
+            <template #icon>
+              <span>
+                <Icon icon="material-symbols:sticker-outline" class="size-6" />
+              </span>
+            </template>
+          </Button>
+          <InputText
+            v-model="messageModel"
+            placeholder="Type a message"
+            class="flex-1 bg-transparent border-0 shadow-none text-black/70! placeholder:text-black/50!"
+            :pt="{
+              root: {
+                class:
+                  '!bg-transparent !border-0 !shadow-none focus:!ring-0 px-3',
+              },
+            }"
+          />
+
+          <Button
+            @click="handleSendMessage"
+            v-tooltip.top="{
+              value: 'Send',
+              pt: {
+                arrow: {
+                  style: {
+                    borderBottomColor: 'var(--p-primary-color)',
+                  },
+                },
+                text: 'bg-primary! text-primary-contrast! text-sm! font-regular!',
+              },
+            }"
+            unstyled
+            class="flex gap-4 p-2 my-1 items-center rounded-full cursor-pointer transition-all duration-500 bg-primary-lighter hover:bg-primary-lighter/80"
+          >
+            <template #icon>
+              <span>
+                <Icon icon="material-symbols:send" class="size-6 text-white" />
+              </span>
+            </template>
+          </Button>
+        </InputGroup>
       </div>
     </div>
   </div>

@@ -166,7 +166,7 @@ const loginGoogle = (): void => {
                     </InputGroupAddon>
                     <InputText
                       name="email"
-                      type="text"
+                      type="email"
                       placeholder="name@gmail.com"
                       autocomplete="email"
                       size="small"
