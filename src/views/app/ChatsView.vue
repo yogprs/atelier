@@ -2,6 +2,7 @@
 import ChatHeader from "@/components/app/ChatHeader.vue";
 import ChatMessage from "@/components/app/ChatMessage.vue";
 import apiClient from "@/lib/apiClient";
+import { useWebSocketStore } from "@/stores/websocket";
 import type { ApiResponse } from "@/types/general";
 import type { ApiRoom, RoomDetail, RoomMember, RoomType } from "@/types/room";
 import type { User } from "@/types/user";
@@ -10,6 +11,8 @@ import { toTitleCase } from "@/utils/stringFormat";
 import { Icon } from "@iconify/vue";
 import { Button, Image } from "primevue";
 import { onMounted, onUnmounted, ref, watch } from "vue";
+
+const websocket = useWebSocketStore();
 
 const rooms = ref<ApiRoom[]>();
 const loading = ref<boolean>();
@@ -20,6 +23,8 @@ const selectedRoom = ref<Pick<
 const selectedRoomId = ref<string>();
 const roomDetail = ref<RoomDetail | null>();
 const userDetail = ref<User | null>();
+
+const lastProcessedTriggerRef = ref<number>(-1);
 
 onMounted(() => {
   getRooms();
@@ -91,6 +96,48 @@ watch(
       roomDetail.value = null;
       getUser();
     }
+  },
+  {
+    immediate: true,
+  },
+);
+
+watch(
+  () => websocket.triggerUpdate,
+  () => {
+    if (websocket.triggerUpdate === lastProcessedTriggerRef.value) return;
+
+    lastProcessedTriggerRef.value = websocket.triggerUpdate;
+
+    const msg = websocket.lastMessage;
+
+    if (!msg || !msg.room_id) return;
+
+    const isChatMessage = [
+      "text",
+      "image",
+      "file",
+      "message",
+      "message_group",
+    ].includes(msg.type);
+
+    if (!isChatMessage) return;
+
+    rooms.value = rooms.value?.map((prev) => {
+      if (prev?.id === msg?.room_id) {
+        return {
+          ...prev,
+          last_message: {
+            id: msg?.message_id ?? `temp-${Date.now()}`,
+            content: msg.body ?? "",
+            user_id: msg.sender_id ?? "",
+            message_type: msg.type ?? "text",
+            timestamp: new Date(msg.timestamp ?? Date.now()).toISOString(),
+          },
+        };
+      }
+      return prev;
+    });
   },
   {
     immediate: true,
