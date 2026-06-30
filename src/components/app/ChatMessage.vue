@@ -30,6 +30,7 @@ const loadingMessage = ref<boolean>(true);
 const selectedMessageIds = ref<string[]>();
 const scrollMessage = ref<any>(null);
 const messageModel = ref<string | null>();
+const lastProcessedTriggerRef = ref<number>(websocket.triggerUpdate);
 
 // const handleScroll = (event: any) => {
 //   const el = event.target;
@@ -159,6 +160,123 @@ watch(
   },
 );
 
+watch(
+  () => websocket.triggerUpdate,
+  () => {
+    if (websocket.triggerUpdate === lastProcessedTriggerRef.value) return;
+
+    lastProcessedTriggerRef.value = websocket.triggerUpdate;
+
+    const msg = websocket.lastMessage;
+
+    if (!msg) return;
+
+    if (msg.type === "error" || msg.type === "error") {
+      toast.add({
+        severity: "error",
+        summary: msg.body ?? "Something went wrong.",
+      });
+
+      websocket.setLastMessage(null);
+
+      return;
+    }
+
+    if (msg.type === "upload_batch_status") {
+      const data = msg.data ?? {};
+      const status: string = data.status ?? "unknown";
+      const totalFiles: number = data.total_files ?? 0;
+      const successCount: number = data.success_count ?? 0;
+      const failedCount: number = data.failed_count ?? 0;
+
+      let toastSeverity:
+        | "error"
+        | "success"
+        | "info"
+        | "warn"
+        | "secondary"
+        | "contrast" = "info";
+
+      let detail = "";
+
+      if (status === "success") {
+        toastSeverity = "success";
+        detail = `${successCount}/${totalFiles} file(s) uploaded successfully`;
+      } else if (status === "failed") {
+        toastSeverity = "error";
+        detail = `Upload failed — ${failedCount}/${totalFiles} file(s) failed`;
+      } else if (status === "partial_failed") {
+        toastSeverity = "error";
+        detail = `${successCount}/${totalFiles} uploaded, ${failedCount} failed`;
+      } else {
+        detail = `Upload status: ${status}`;
+      }
+
+      toast.add({
+        severity: toastSeverity,
+        summary: "Upload Status",
+        detail: detail,
+        life: toastSeverity === "error" ? 5000 : 3000,
+      });
+
+      websocket.setLastMessage(null);
+
+      return;
+    }
+
+    const isChatMessage =
+      msg.room_id === roomId.value &&
+      (msg.type === "text" ||
+        msg.type === "image" ||
+        msg.type === "file" ||
+        msg.type === "message");
+
+    if (isChatMessage) {
+      const resolvedType =
+        msg.type === "image" ? "image" : msg.type === "file" ? "file" : "text";
+
+      const incomingMessage: Message = {
+        id: msg.message_id || `ws-${Date.now()}`,
+        room_id: msg.room_id,
+        sender_id: msg.sender_id || "",
+        sender_name: msg.sender_name || "",
+        content: msg.body || "",
+        message_type: resolvedType,
+        timestamp: new Date(msg.timestamp || Date.now()).toISOString(),
+      };
+
+      const existingIndex = (messages.value as Message[]).findIndex(
+        (m) =>
+          m.id === incomingMessage.id ||
+          (m.id.startsWith("temp-") &&
+            !m.id.startsWith("temp-image-") &&
+            !m.id.startsWith("temp-file-") &&
+            m.content === incomingMessage.content &&
+            m.sender_name === incomingMessage.sender_name &&
+            m.room_id === incomingMessage.room_id) ||
+          (m.id.startsWith("temp-image-") &&
+            m.sender_name === incomingMessage.sender_name &&
+            m.room_id === incomingMessage.room_id) ||
+          (m.id.startsWith("temp-file-") &&
+            m.sender_name === incomingMessage.sender_name &&
+            m.room_id === incomingMessage.room_id),
+      );
+
+      if (existingIndex !== -1) {
+        const updatedMessages = [...(messages.value ?? [])];
+        updatedMessages[existingIndex] = incomingMessage;
+        messages.value = updatedMessages;
+      } else {
+        messages.value = [...(messages.value ?? []), incomingMessage];
+      }
+    }
+    websocket.setLastMessage(null);
+  },
+  {
+    immediate: true,
+  },
+);
+
 // watch(
 //   [hasMore.value, nextCursor.value, roomId.value],
 //   () => {
@@ -216,9 +334,9 @@ watch(
           v-if="message?.message_type === 'system'"
           class="w-full flex items-center justify-center my-2"
         >
-          <span class="text-xs font-medium">
+          <p class="text-xs font-medium">
             {{ message?.content }}
-          </span>
+          </p>
         </div>
 
         <!-- Message Chat -->
@@ -294,12 +412,12 @@ watch(
                 </div>
               </div>
               <!-- Content Message -->
-              <span
+              <p
                 v-if="message?.content"
                 :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white' : 'text-primary-base'}`"
               >
                 {{ message?.content }}
-              </span>
+              </p>
               <div class="flex flex-col items-end mt-px">
                 <span
                   :class="`text-[10px] ${message?.sender_id === auth?.user?.user_id ? 'text-[#ffffff99]' : 'text-neutral-textMuted'}`"
@@ -320,11 +438,11 @@ watch(
               </span>
             </div>
             <!-- Content Message -->
-            <span
-              :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white' : 'text-primary-base'}`"
+            <p
+              :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white pt-2' : 'text-primary-base'}`"
             >
               {{ message?.content }}
-            </span>
+            </p>
             <div class="flex flex-col items-end mt-px">
               <span
                 :class="`text-[10px] ${message?.sender_id === auth?.user?.user_id ? 'text-[#ffffff99]' : 'text-neutral-textMuted'}`"

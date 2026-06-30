@@ -44,3 +44,22 @@ export interface ApiResponse<T = any> {
   message?: string;
   error?: string;
 }
+
+// export enum Message_type {
+//   text = "text",
+//   file = "file",
+//   image = "image",
+//   video = "video",
+//   err = "error",
+//   upload_status = "upload_batch_status",
+//   new_room = "new_room",
+// }
+
+export type Message_type =
+  | "text"
+  | "file"
+  | "image"
+  | "video"
+  | "error"
+  | "upload_batch_status"
+  | "new_room";

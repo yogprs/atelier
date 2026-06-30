@@ -255,15 +255,17 @@ onUnmounted(() => {
                 </div>
 
                 <div class="w-full flex justify-between overflow-hidden">
-                  <div class="flex flex-col gap-1">
+                  <div class="flex flex-col gap-1 flex-1 min-w-0">
                     <span class="text-sm font-medium text-primary-base">{{
                       room?.name?.length > 0
                         ? room?.name
                         : room?.target_username
                     }}</span>
-                    <span class="text-xs font-normal text-slate-800">{{
-                      room?.last_message ? room?.last_message?.content : ""
-                    }}</span>
+                    <p class="text-xs font-normal text-slate-800 truncate">
+                      {{
+                        room?.last_message ? room?.last_message?.content : ""
+                      }}
+                    </p>
                   </div>
                   <div v-if="room?.last_message" class="flex flex-col gap-1">
                     <span class="text-xs font-normal text-slate-800">{{
