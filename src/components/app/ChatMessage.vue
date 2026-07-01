@@ -383,45 +383,44 @@ onUnmounted(() => {
       ref="scrollMessage"
       class="flex-1 w-full h-full overflow-y-auto scroll-message pb-2"
     >
-      <div
-        :key="message?.id"
-        v-for="(message, index) in messages"
-        :class="`${selectedMessageIds?.includes(message?.id) ? 'bg-[#2563eb26]' : ''}`"
-      >
-        <div class="px-12 pt-4 pb-2">
-          <!-- Date Separator -->
+      <div :key="message?.id" v-for="(message, index) in messages">
+        <!-- Date Separator -->
+        <div
+          v-if="
+            showingDate(
+              messages?.map((val) => val?.timestamp) as string[],
+              message?.timestamp,
+              index,
+            )
+          "
+          class="w-full flex flex-col items-center my-3"
+        >
           <div
-            v-if="
-              showingDate(
-                messages?.map((val) => val?.timestamp) as string[],
-                message?.timestamp,
-                index,
-              )
-            "
-            class="w-full flex flex-col items-center my-3"
+            class="px-3 py-1 rounded-full bg-[#ffffff14] border border-neutral-300"
           >
-            <div
-              class="px-3 py-1 rounded-full bg-[#ffffff14] border border-neutral-300"
-            >
-              <div class="flex items-center justify-center">
-                <span class="text-[10px] font-semibold text-neutral-textMuted">
-                  {{ toTitleCase(formatDate(message?.timestamp, false)) }}
-                </span>
-              </div>
+            <div class="flex items-center justify-center">
+              <span class="text-[10px] font-semibold text-neutral-textMuted">
+                {{ toTitleCase(formatDate(message?.timestamp, false)) }}
+              </span>
             </div>
           </div>
+        </div>
 
-          <!-- System Message -->
-          <div
-            v-if="message?.message_type === 'system'"
-            class="w-full flex items-center justify-center my-2"
-          >
-            <p class="text-xs font-medium">
-              {{ message?.content }}
-            </p>
-          </div>
+        <!-- System Message -->
+        <div
+          v-if="message?.message_type === 'system'"
+          class="w-full flex items-center justify-center my-2"
+        >
+          <p class="text-xs font-medium">
+            {{ message?.content }}
+          </p>
+        </div>
 
-          <!-- Message Chat -->
+        <!-- Message Chat -->
+        <div
+          class="px-12 pt-4 pb-2"
+          :class="`${selectedMessageIds?.includes(message?.id) ? 'bg-[#2563eb26]' : ''}`"
+        >
           <div
             :class="`w-full flex flex-col transition-all duration-300 ${message?.sender_id === auth?.user?.user_id ? 'items-end' : 'items-start'}`"
           >

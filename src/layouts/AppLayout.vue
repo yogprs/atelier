@@ -6,7 +6,7 @@ import AppSidebar from "@/components/app/AppSidebar.vue";
   <div class="w-full h-screen bg-neutral-bg text-black overflow-hidden">
     <div class="flex h-full flex-row">
       <AppSidebar />
-      <div class="flex-1 min-w-0">
+      <div class="flex-1 min-w-0 h-full">
         <router-view />
       </div>
     </div>
