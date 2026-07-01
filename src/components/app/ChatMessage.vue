@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type {
   Message,
   ChatMessageProps,
@@ -11,10 +11,18 @@ import { formatDate, formatTime } from "@/utils/dateFormat";
 import { useAuthStore } from "@/stores/auth";
 import type { ApiResponse } from "@/types/general";
 import { toTitleCase } from "@/utils/stringFormat";
-import { Button, Image, InputGroup, InputText, useToast } from "primevue";
+import {
+  Button,
+  Image,
+  InputGroup,
+  InputText,
+  ProgressSpinner,
+  useToast,
+} from "primevue";
 import dayjs from "dayjs";
 import { Icon } from "@iconify/vue";
 import { useWebSocketStore } from "@/stores/websocket";
+import { Form } from "@primevue/forms";
 
 const toast = useToast();
 const auth = useAuthStore();
@@ -31,14 +39,29 @@ const selectedMessageIds = ref<string[]>();
 const scrollMessage = ref<any>(null);
 const messageModel = ref<string | null>();
 const lastProcessedTriggerRef = ref<number>(websocket.triggerUpdate);
+const loadingMore = ref<boolean>(false);
+const showScrollToBottom = ref<boolean>(false);
 
-// const handleScroll = (event: any) => {
-//   const el = event.target;
+const handleScroll = async (event: Event) => {
+  const el = event.target as HTMLElement;
 
-//   console.log("scrollTop:", el.scrollTop);
-//   console.log("scrollHeight:", el.scrollHeight);
-//   console.log("clientHeight:", el.clientHeight);
-// };
+  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+
+  showScrollToBottom.value = distanceFromBottom > 150;
+
+  // load pesan lama
+  if (
+    el.scrollTop <= 20 &&
+    hasMore.value &&
+    nextCursor.value &&
+    !loadingMore.value
+  ) {
+    await fetchMessage(
+      `&next_cursor=${encodeURIComponent(nextCursor.value)}`,
+      true,
+    );
+  }
+};
 
 const toggleMessageSelection = (messageId: string) => {
   selectedMessageIds.value = selectedMessageIds.value?.includes(messageId)
@@ -58,6 +81,7 @@ const showingDate = (
 };
 
 const handleSendMessage = async () => {
+  if (!messageModel.value) return;
   if (!roomId.value) {
     await createDirectMessage(props?.idUser as string, "text");
     return;
@@ -68,8 +92,14 @@ const handleSendMessage = async () => {
 const scrollToDown = async () => {
   await nextTick();
 
-  const el = scrollMessage.value;
-  el.scrollTop = el.scrollHeight;
+  if (!scrollMessage.value) return;
+
+  scrollMessage.value.scrollTo({
+    top: scrollMessage.value.scrollHeight,
+    behavior: "smooth",
+  });
+
+  showScrollToBottom.value = false;
 };
 
 const createDirectMessage = async (
@@ -126,24 +156,58 @@ const handleSendMessageHaveId = async () => {
 
   messages.value = [...messages.value!, newMessage];
 
+  scrollToDown();
+
+  websocket.setLastMessage(payload);
+
   messageModel.value = null;
 };
 
-const fetchMessage = async (addtionalParams?: string) => {
+const fetchMessage = async (additionalParams?: string, isLoadMore = false) => {
   if (!roomId.value) return;
-  loadingMessage.value = true;
-  try {
-    const endpoint = `/message/${roomId.value}?limit=${pageLimit.value}${addtionalParams ? addtionalParams : ""}`;
-    const response = await apiClient.get<ApiResponse<RoomMessage>>(endpoint);
-    nextCursor.value = response?.data?.next_cursor;
-    hasMore.value = response?.data?.has_more ?? false;
-    messages.value = response?.data?.messages?.reverse();
 
-    scrollToDown();
+  if (isLoadMore) {
+    loadingMore.value = true;
+  } else {
+    loadingMessage.value = true;
+  }
+
+  try {
+    const endpoint = `/message/${roomId.value}?limit=${pageLimit.value}${
+      additionalParams ?? ""
+    }`;
+
+    const response = await apiClient.get<ApiResponse<RoomMessage>>(endpoint);
+
+    const olderMessages = response.data?.messages.reverse() ?? [];
+
+    nextCursor.value = response.data?.next_cursor;
+    hasMore.value = response.data?.has_more ?? false;
+
+    if (!isLoadMore) {
+      messages.value = olderMessages;
+
+      await nextTick();
+
+      scrollToDown();
+    } else {
+      const el = scrollMessage.value;
+
+      const previousHeight = el.scrollHeight;
+
+      messages.value = [...olderMessages, ...(messages.value ?? [])];
+
+      await nextTick();
+
+      const newHeight = el.scrollHeight;
+
+      el.scrollTop += newHeight - previousHeight;
+    }
   } catch (error) {
     console.error(error);
   } finally {
     loadingMessage.value = false;
+    loadingMore.value = false;
   }
 };
 
@@ -162,7 +226,7 @@ watch(
 
 watch(
   () => websocket.triggerUpdate,
-  () => {
+  async () => {
     if (websocket.triggerUpdate === lastProcessedTriggerRef.value) return;
 
     lastProcessedTriggerRef.value = websocket.triggerUpdate;
@@ -268,6 +332,19 @@ watch(
         messages.value = updatedMessages;
       } else {
         messages.value = [...(messages.value ?? []), incomingMessage];
+
+        await nextTick();
+
+        const el = scrollMessage.value;
+
+        const distanceFromBottom =
+          el.scrollHeight - el.scrollTop - el.clientHeight;
+
+        if (distanceFromBottom < 100) {
+          scrollToDown();
+        } else {
+          showScrollToBottom.value = true;
+        }
       }
     }
     websocket.setLastMessage(null);
@@ -277,27 +354,31 @@ watch(
   },
 );
 
-// watch(
-//   [hasMore.value, nextCursor.value, roomId.value],
-//   () => {
-//     fetchMessage(`&limit=${pageLimit.value}`);
-//   },
-//   {
-//     immediate: true,
-//   },
-// );
+onMounted(() => {
+  scrollMessage.value?.addEventListener("scroll", handleScroll);
+});
 
-// onMounted(() => {
-//   scrollMessage.value?.addEventListener("scroll", handleScroll);
-// });
-
-// onUnmounted(() => {
-//   scrollMessage.value?.removeEventListener("scroll", handleScroll);
-// });
+onUnmounted(() => {
+  scrollMessage.value?.removeEventListener("scroll", handleScroll);
+});
 </script>
 
 <template>
-  <div class="w-full h-full pb-30">
+  <div class="w-full h-full pb-30 relative">
+    <div v-if="loadingMore" class="flex justify-center py-2">
+      <ProgressSpinner
+        aria-label="loading"
+        stroke-width="14"
+        animationDuration=".5s"
+        style="width: 24px; height: 24px"
+        :pt="{
+          circle: {
+            class: 'stroke-primary-light!',
+          },
+          circleTrack: { style: { stroke: 'transparent' } },
+        }"
+      />
+    </div>
     <div
       ref="scrollMessage"
       class="flex-1 w-full h-full overflow-y-auto scroll-message pb-2"
@@ -305,116 +386,142 @@ watch(
       <div
         :key="message?.id"
         v-for="(message, index) in messages"
-        class="px-4 pt-4"
+        :class="`${selectedMessageIds?.includes(message?.id) ? 'bg-[#2563eb26]' : ''}`"
       >
-        <!-- Date Separator -->
-        <div
-          v-if="
-            showingDate(
-              messages?.map((val) => val?.timestamp) as string[],
-              message?.timestamp,
-              index,
-            )
-          "
-          class="w-full flex flex-col items-center my-3"
-        >
+        <div class="px-12 pt-4 pb-2">
+          <!-- Date Separator -->
           <div
-            class="px-3 py-1 rounded-full bg-[#ffffff14] border border-neutral-300"
-          >
-            <div class="flex items-center justify-center">
-              <span class="text-[10px] font-semibold text-neutral-textMuted">
-                {{ toTitleCase(formatDate(message?.timestamp, false)) }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- System Message -->
-        <div
-          v-if="message?.message_type === 'system'"
-          class="w-full flex items-center justify-center my-2"
-        >
-          <p class="text-xs font-medium">
-            {{ message?.content }}
-          </p>
-        </div>
-
-        <!-- Message Chat -->
-        <div
-          :class="`w-full flex flex-col transition-all duration-300 ${selectedMessageIds?.includes(message?.id) ? 'bg-[#2563eb26]' : ''} ${message?.sender_id === auth?.user?.user_id ? 'items-end' : 'items-start'}`"
-        >
-          <!-- @click="toggleMessageSelection(message?.id)" -->
-          <div
-            v-if="message?.message_type === 'file'"
-            @contextmenu.prevent="toggleMessageSelection(message?.id)"
-            :class="`max-w-[80%] min-w-30 px-3 pt-1 pb-2 rounded-2xl cursor-pointer border border-neutral-300 shadow-sm ${message?.sender_id === auth?.user?.user_id ? 'bg-primary-lighter rounded-br-sm text-white' : 'bg-neutral-white rounded-bl-sm text-black'}`"
-          >
-            <div v-if="message?.sender_id !== auth?.user?.user_id">
-              <span class="text-xs font-semibold text-neutral-textMain">
-                {{ message?.sender_name }}
-              </span>
-            </div>
-
-            <div>
-              <!-- Content File -->
-              <span
-                :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white' : 'text-primary-base'}`"
-              >
-                {{ message?.content?.replace("📎 ", "") || "File" }}
-              </span>
-            </div>
-          </div>
-          <div
-            v-else-if="
-              message?.message_type === 'image' && message?.attachments
+            v-if="
+              showingDate(
+                messages?.map((val) => val?.timestamp) as string[],
+                message?.timestamp,
+                index,
+              )
             "
-            @contextmenu.prevent="toggleMessageSelection(message?.id)"
-            :class="`max-w-[80%] min-w-30 px-3 pt-1 pb-2 rounded-2xl cursor-pointer border border-neutral-300 shadow-sm ${message?.sender_id === auth?.user?.user_id ? 'bg-primary-lighter rounded-br-sm text-white' : 'bg-neutral-white rounded-bl-sm text-black'}`"
+            class="w-full flex flex-col items-center my-3"
           >
-            <div v-if="message?.sender_id !== auth?.user?.user_id">
-              <span class="text-xs font-semibold text-neutral-textMain">
-                {{ message?.sender_name }}
-              </span>
+            <div
+              class="px-3 py-1 rounded-full bg-[#ffffff14] border border-neutral-300"
+            >
+              <div class="flex items-center justify-center">
+                <span class="text-[10px] font-semibold text-neutral-textMuted">
+                  {{ toTitleCase(formatDate(message?.timestamp, false)) }}
+                </span>
+              </div>
             </div>
+          </div>
 
-            <div>
-              <!-- Content Image -->
-              <div
-                :class="`${message?.attachments?.length > 1 ? 'grid grid-cols-2' : 'grid grid-cols-1'} gap-1 rounded-xl overflow-hidden pt-2 relative`"
-              >
-                <div
-                  v-if="message?.attachments?.length > 0"
-                  v-for="(image, index) in message?.attachments?.slice(0, 4)"
-                  :key="index"
-                  :class="`${message?.attachments?.length > 1 ? 'w-25! h-25! rounded-lg!' : 'w-45! h-45! rounded-xl!'}`"
+          <!-- System Message -->
+          <div
+            v-if="message?.message_type === 'system'"
+            class="w-full flex items-center justify-center my-2"
+          >
+            <p class="text-xs font-medium">
+              {{ message?.content }}
+            </p>
+          </div>
+
+          <!-- Message Chat -->
+          <div
+            :class="`w-full flex flex-col transition-all duration-300 ${message?.sender_id === auth?.user?.user_id ? 'items-end' : 'items-start'}`"
+          >
+            <!-- @click="toggleMessageSelection(message?.id)" -->
+            <div
+              v-if="message?.message_type === 'file'"
+              @contextmenu.prevent="toggleMessageSelection(message?.id)"
+              :class="`max-w-[80%] min-w-30 px-3 pt-1 pb-2 rounded-2xl cursor-pointer border border-neutral-300 shadow-sm ${message?.sender_id === auth?.user?.user_id ? 'bg-primary-lighter rounded-br-sm text-white' : 'bg-neutral-white rounded-bl-sm text-black'}`"
+            >
+              <div v-if="message?.sender_id !== auth?.user?.user_id">
+                <span class="text-xs font-semibold text-neutral-textMain">
+                  {{ message?.sender_name }}
+                </span>
+              </div>
+
+              <div>
+                <!-- Content File -->
+                <span
+                  :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white' : 'text-primary-base'}`"
                 >
-                  <Image
-                    :src="image"
-                    :alt="image"
-                    preview
-                    :pt="{
-                      root: {
-                        class: 'w-full h-full',
-                      },
-                      image: {
-                        class: 'w-full h-full object-cover',
-                      },
-                    }"
-                  />
+                  {{ message?.content?.replace("📎 ", "") || "File" }}
+                </span>
+              </div>
+            </div>
+            <div
+              v-else-if="
+                message?.message_type === 'image' && message?.attachments
+              "
+              @contextmenu.prevent="toggleMessageSelection(message?.id)"
+              :class="`max-w-[80%] min-w-30 px-3 pt-1 pb-2 rounded-2xl cursor-pointer border border-neutral-300 shadow-sm ${message?.sender_id === auth?.user?.user_id ? 'bg-primary-lighter rounded-br-sm text-white' : 'bg-neutral-white rounded-bl-sm text-black'}`"
+            >
+              <div v-if="message?.sender_id !== auth?.user?.user_id">
+                <span class="text-xs font-semibold text-neutral-textMain">
+                  {{ message?.sender_name }}
+                </span>
+              </div>
+
+              <div>
+                <!-- Content Image -->
+                <div
+                  :class="`${message?.attachments?.length > 1 ? 'grid grid-cols-2' : 'grid grid-cols-1'} gap-1 rounded-xl overflow-hidden py-2 relative`"
+                >
+                  <div
+                    v-if="message?.attachments?.length > 0"
+                    v-for="(image, index) in message?.attachments?.slice(0, 4)"
+                    :key="index"
+                    :class="`${message?.attachments?.length > 1 ? 'w-25! h-25! rounded-lg!' : 'w-45! h-45! rounded-xl!'}`"
+                  >
+                    <Image
+                      :src="image"
+                      :alt="image"
+                      preview
+                      :pt="{
+                        root: {
+                          class: 'w-full h-full',
+                        },
+                        image: {
+                          class: 'w-full h-full object-cover',
+                        },
+                      }"
+                    />
+                  </div>
+                  <div
+                    v-if="message?.attachments?.length > 4"
+                    class="absolute right-0 bottom-0 w-25 h-25 rounded-lg flex flex-col justify-center items-center bg-[#00000080]"
+                  >
+                    <span class="text-sm font-semibold text-white">
+                      + {{ message?.attachments?.length - 4 }}
+                    </span>
+                  </div>
                 </div>
-                <div
-                  v-if="message?.attachments?.length > 4"
-                  class="absolute right-0 bottom-0 w-25 h-25 rounded-lg flex flex-col justify-center items-center bg-[#00000080]"
+                <!-- Content Message -->
+                <p
+                  v-if="message?.content"
+                  :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white' : 'text-primary-base'}`"
                 >
-                  <span class="text-sm font-semibold text-white">
-                    + {{ message?.attachments?.length - 4 }}
+                  {{ message?.content }}
+                </p>
+                <div class="flex flex-col items-end mt-px">
+                  <span
+                    :class="`text-[10px] ${message?.sender_id === auth?.user?.user_id ? 'text-[#ffffff99]' : 'text-neutral-textMuted'}`"
+                  >
+                    {{ formatTime(message?.timestamp) }}
                   </span>
                 </div>
               </div>
+            </div>
+            <div
+              v-else-if="message?.content && message?.message_type !== 'system'"
+              @contextmenu.prevent="toggleMessageSelection(message?.id)"
+              :class="`max-w-[80%] min-w-30 px-3 pt-1 pb-2 rounded-2xl cursor-pointer border border-neutral-300 shadow-sm ${message?.sender_id === auth?.user?.user_id ? 'bg-primary-lighter rounded-br-sm text-white' : 'bg-neutral-white rounded-bl-sm text-black'}`"
+            >
+              <div v-if="message?.sender_id !== auth?.user?.user_id">
+                <span class="text-xs font-semibold text-neutral-textMain">
+                  {{ message?.sender_name }}
+                </span>
+              </div>
               <!-- Content Message -->
               <p
-                v-if="message?.content"
-                :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white' : 'text-primary-base'}`"
+                :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white pt-2' : 'text-primary-base'}`"
               >
                 {{ message?.content }}
               </p>
@@ -427,35 +534,30 @@ watch(
               </div>
             </div>
           </div>
-          <div
-            v-else-if="message?.content && message?.message_type !== 'system'"
-            @contextmenu.prevent="toggleMessageSelection(message?.id)"
-            :class="`max-w-[80%] min-w-30 px-3 pt-1 pb-2 rounded-2xl cursor-pointer border border-neutral-300 shadow-sm ${message?.sender_id === auth?.user?.user_id ? 'bg-primary-lighter rounded-br-sm text-white' : 'bg-neutral-white rounded-bl-sm text-black'}`"
-          >
-            <div v-if="message?.sender_id !== auth?.user?.user_id">
-              <span class="text-xs font-semibold text-neutral-textMain">
-                {{ message?.sender_name }}
-              </span>
-            </div>
-            <!-- Content Message -->
-            <p
-              :class="`text-xs ${message?.sender_id === auth?.user?.user_id ? 'text-white pt-2' : 'text-primary-base'}`"
-            >
-              {{ message?.content }}
-            </p>
-            <div class="flex flex-col items-end mt-px">
-              <span
-                :class="`text-[10px] ${message?.sender_id === auth?.user?.user_id ? 'text-[#ffffff99]' : 'text-neutral-textMuted'}`"
-              >
-                {{ formatTime(message?.timestamp) }}
-              </span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
+    <!-- Button to latest -->
+    <Transition
+      enter-active-class="transition duration-200"
+      leave-active-class="transition duration-200"
+      enter-from-class="opacity-0 translate-y-2"
+      leave-to-class="opacity-0 translate-y-2"
+    >
+      <Button
+        v-if="showScrollToBottom"
+        @click="scrollToDown"
+        rounded
+        class="absolute! bottom-35 right-4 shadow-xl z-50 bg-primary! text-primary-contrast! border! border-neutral-300!"
+      >
+        <template #icon>
+          <Icon icon="material-symbols:keyboard-arrow-down" class="text-xl" />
+        </template>
+      </Button>
+    </Transition>
+    <!-- Input -->
     <div class="w-full h-full bg-transparent">
-      <div class="h-12.5 px-4">
+      <Form @submit="handleSendMessage" class="h-12.5 px-2">
         <InputGroup
           class="bg-neutral-inputBg! border border-neutral-300 text-neutral-400! rounded-full h-12 overflow-hidden px-2 items-center"
         >
@@ -515,7 +617,7 @@ watch(
           />
 
           <Button
-            @click="handleSendMessage"
+            type="submit"
             v-tooltip.top="{
               value: 'Send',
               pt: {
@@ -537,7 +639,7 @@ watch(
             </template>
           </Button>
         </InputGroup>
-      </div>
+      </Form>
     </div>
   </div>
 </template>
