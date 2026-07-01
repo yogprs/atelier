@@ -3,7 +3,7 @@ import type { User } from "./user";
 
 export interface ChatMessageProps {
   idRoom: string;
-  idUser: string;
+  idUser: string | null;
 }
 
 export type RoomDetailHeader = Pick<

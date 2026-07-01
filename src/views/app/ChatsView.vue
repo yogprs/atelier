@@ -10,16 +10,24 @@ import { formatDate } from "@/utils/dateFormat";
 import { toTitleCase } from "@/utils/stringFormat";
 import { Icon } from "@iconify/vue";
 import { Button, Image } from "primevue";
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 const websocket = useWebSocketStore();
 
+const scrollChat = ref<any>(null);
+
 const rooms = ref<ApiRoom[]>();
 const loading = ref<boolean>();
+
 const selectedRoom = ref<Pick<
   ApiRoom,
   "id" | "target_user_id" | "room_type"
 > | null>();
+// const selectedRoom = ref<{
+//   id: string;
+//   target_user_id: string | null;
+//   room_type: RoomType;
+// } | null>();
 const selectedRoomId = ref<string | null>();
 const selectedTargetUserId = ref<string | null>();
 const roomDetail = ref<RoomDetail | null>();
@@ -41,10 +49,17 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   }
 };
 
+const scrollToTop = async () => {
+  await nextTick();
+
+  const el = scrollChat.value;
+  el.scrollTop = 0;
+};
+
 const selectRoom = (idRoom: string, idUser: string, roomType: RoomType) => {
   selectedRoom.value = {
     id: idRoom,
-    target_user_id: idUser,
+    target_user_id: idUser ?? null,
     room_type: roomType,
   };
 };
@@ -170,6 +185,18 @@ watch(
   },
 );
 
+watch(
+  () => websocket.lastMessage,
+  async () => {
+    await getRooms();
+    scrollToTop();
+    websocket.setLastMessage(null);
+  },
+  {
+    immediate: true,
+  },
+);
+
 onMounted(() => {
   window.addEventListener("keydown", handleKeyDown);
 });
@@ -229,9 +256,12 @@ onUnmounted(() => {
             </Button>
           </div>
         </div>
-        <div class="w-full h-full overflow-y-auto scroll-chat pb-12">
+        <div
+          ref="scrollChat"
+          class="w-full h-full overflow-y-auto scroll-chat pb-12"
+        >
           <div class="flex flex-col gap-2 px-4 pb-8">
-            <div :key="i" v-for="(room, i) in rooms" class="w-full">
+            <div :key="room.id" v-for="room in rooms" class="w-full">
               <div
                 @click="
                   selectRoom(room.id, room?.target_user_id, room.room_type)
