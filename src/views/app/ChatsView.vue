@@ -209,7 +209,9 @@ onUnmounted(() => {
 <template>
   <main class="w-full h-full">
     <div class="w-full h-full flex flex-row">
-      <div class="w-full max-w-100 h-full shrink-0 rounded-tl-xl">
+      <div
+        class="w-full max-w-100 h-full shrink-0 rounded-tl-xl overflow-hidden flex flex-col pb-px"
+      >
         <div class="flex justify-between p-4">
           <h1 class="font-semibold text-2xl">Chats</h1>
           <div class="flex gap-4">
@@ -256,11 +258,8 @@ onUnmounted(() => {
             </Button>
           </div>
         </div>
-        <div
-          ref="scrollChat"
-          class="w-full h-full overflow-y-auto scroll-chat pb-12"
-        >
-          <div class="flex flex-col gap-2 px-4 pb-8">
+        <div ref="scrollChat" class="w-full h-full overflow-y-auto scroll-chat">
+          <div class="flex flex-col gap-2 px-4">
             <div :key="room.id" v-for="room in rooms" class="w-full">
               <div
                 @click="
@@ -313,7 +312,7 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-      <div class="flex-1 min-w-0">
+      <div class="flex-1 h-full min-w-0">
         <div
           class="flex flex-col w-full h-full min-w-0 bg-neutral-white shadow-xl relative"
         >
