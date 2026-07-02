@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ChatHeader from "@/components/app/ChatHeader.vue";
 import ChatMessage from "@/components/app/ChatMessage.vue";
+import DialogNewChat from "@/components/app/DialogNewChat.vue";
 import apiClient from "@/lib/apiClient";
 import { useWebSocketStore } from "@/stores/websocket";
 import type { ApiResponse } from "@/types/general";
@@ -23,15 +24,11 @@ const selectedRoom = ref<Pick<
   ApiRoom,
   "id" | "target_user_id" | "room_type"
 > | null>();
-// const selectedRoom = ref<{
-//   id: string;
-//   target_user_id: string | null;
-//   room_type: RoomType;
-// } | null>();
 const selectedRoomId = ref<string | null>();
 const selectedTargetUserId = ref<string | null>();
 const roomDetail = ref<RoomDetail | null>();
 const userDetail = ref<User | null>();
+const showDialog = ref(false);
 
 const lastProcessedTriggerRef = ref<number>(-1);
 
@@ -47,6 +44,10 @@ const handleKeyDown = (event: KeyboardEvent): void => {
       selectedTargetUserId.value = null;
     }
   }
+};
+
+const toggleShowDialog = () => {
+  showDialog.value = true;
 };
 
 const scrollToTop = async () => {
@@ -216,6 +217,7 @@ onUnmounted(() => {
           <h1 class="font-semibold text-2xl">Chats</h1>
           <div class="flex gap-4">
             <Button
+              @click="toggleShowDialog"
               v-tooltip.bottom="{
                 value: 'New Chat',
                 pt: {
@@ -337,6 +339,8 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <DialogNewChat v-model:visible="showDialog" />
   </main>
 </template>
 

@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import router from "@/router";
 import { setSessionExpiredCallback } from "../lib/apiClient";
 import { refreshAccessToken } from "../services/auth/refreshService";
 import {
@@ -67,6 +68,7 @@ export const useAuthStore = defineStore("auth", {
             );
             clearTokens();
             this.session = null;
+            router.push("/auth/login");
             return;
           }
         } else if (isExpired && !refreshToken) {
@@ -75,6 +77,7 @@ export const useAuthStore = defineStore("auth", {
           );
           clearTokens();
           this.session = null;
+          router.push("/auth/login");
           return;
         }
 
@@ -83,6 +86,7 @@ export const useAuthStore = defineStore("auth", {
           console.warn("⚠️ Could not decode user info from token");
           clearTokens();
           this.session = null;
+          router.push("/auth/login");
           return;
         }
 
@@ -137,6 +141,7 @@ export const useAuthStore = defineStore("auth", {
       clearTokens();
       this.session = null;
       console.log("🔓 Logged out");
+      router.push("/auth/login");
     },
 
     /**

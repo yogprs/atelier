@@ -25,9 +25,8 @@ export async function refreshAccessToken(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `${refreshToken}`,
       },
-      // body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({ refresh_token: refreshToken }),
     });
 
     if (!response.ok) {
