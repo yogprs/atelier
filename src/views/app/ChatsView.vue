@@ -2,7 +2,10 @@
 import ChatHeader from "@/components/app/ChatHeader.vue";
 import ChatMessage from "@/components/app/ChatMessage.vue";
 import DialogNewChat from "@/components/app/DialogNewChat.vue";
+import GroupDetail from "@/components/chat/GroupDetail.vue";
+import UserDetail from "@/components/chat/UserDetail.vue";
 import apiClient from "@/lib/apiClient";
+import { useRoomStore } from "@/stores/room";
 import { useWebSocketStore } from "@/stores/websocket";
 import type { ApiResponse } from "@/types/general";
 import type { ApiRoom, RoomDetail, RoomMember, RoomType } from "@/types/room";
@@ -14,6 +17,7 @@ import { Button, Image } from "primevue";
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 const websocket = useWebSocketStore();
+const roomStore = useRoomStore();
 
 const scrollChat = ref<any>(null);
 
@@ -29,6 +33,7 @@ const selectedTargetUserId = ref<string | null>();
 const roomDetail = ref<RoomDetail | null>();
 const userDetail = ref<User | null>();
 const showDialog = ref(false);
+const showDetail = ref(false);
 
 const lastProcessedTriggerRef = ref<number>(-1);
 
@@ -109,6 +114,7 @@ watch(
     if (selectedRoom.value?.id === selectedRoomId.value) return;
     selectedRoomId.value = selectedRoom.value?.id;
     selectedTargetUserId.value = selectedRoom.value?.target_user_id;
+    showDetail.value = false;
     if (selectedRoom.value?.room_type === "group") {
       userDetail.value = null;
       getRoomDetail();
@@ -192,6 +198,19 @@ watch(
     await getRooms();
     scrollToTop();
     websocket.setLastMessage(null);
+  },
+  {
+    immediate: true,
+  },
+);
+
+watch(
+  () => roomStore.isUpdated,
+  () => {
+    if (!roomStore.isUpdated) return;
+    getRooms();
+    getRoomDetail();
+    roomStore.setUpdated(false);
   },
   {
     immediate: true,
@@ -314,12 +333,13 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-      <div class="flex-1 h-full min-w-0">
+      <div class="flex-1 h-full min-w-0 flex relative overflow-hidden">
         <div
-          class="flex flex-col w-full h-full min-w-0 bg-neutral-white shadow-xl relative"
+          class="flex flex-col w-full h-full min-w-0 bg-neutral-white shadow-xl relative flex-1"
         >
           <div v-if="selectedRoom" class="w-full h-full">
             <ChatHeader
+              @open-detail="showDetail = !showDetail"
               :data="{
                 id: (roomDetail?.id as string) ?? (userDetail?.id as string),
                 name: roomDetail?.name as string,
@@ -337,6 +357,32 @@ onUnmounted(() => {
             />
           </div>
         </div>
+
+        <!-- Right Sidebar (Detail) Overlay -->
+        <Transition name="slide-right">
+          <div
+            v-if="showDetail && selectedRoom"
+            class="absolute right-0 top-0 h-full w-full max-w-md z-50 bg-white shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)]"
+          >
+            <UserDetail
+              v-if="selectedRoom?.room_type === 'direct' && userDetail"
+              :user="{
+                name: userDetail.username,
+                phone: userDetail.email,
+                about: userDetail.about || '',
+                avatarUrl: userDetail.avatar,
+              }"
+              @close="showDetail = false"
+            />
+            <GroupDetail
+              v-if="selectedRoom?.room_type === 'group' && roomDetail"
+              :group="{
+                id: roomDetail.id,
+              }"
+              @close="showDetail = false"
+            />
+          </div>
+        </Transition>
       </div>
     </div>
 
@@ -362,5 +408,15 @@ onUnmounted(() => {
 
 .scroll-chat::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.slide-right-enter-from,
+.slide-right-leave-to {
+  transform: translateX(100%);
 }
 </style>

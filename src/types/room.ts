@@ -19,6 +19,7 @@ export interface RoomMember {
   user_id: string;
   username: string;
   email: string;
+  avatar_url: string;
   role: "admin" | "member";
   joined_at: string;
 }

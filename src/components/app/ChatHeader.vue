@@ -11,6 +11,8 @@ import { ref, watch } from "vue";
 
 const props = defineProps<ChatHeaderProps>();
 
+const emit = defineEmits(["open-detail"]);
+
 let timer: ReturnType<typeof setTimeout>;
 
 const showPreviewText = ref<boolean>(true);
@@ -37,10 +39,10 @@ watch(
 <template>
   <div class="w-full bg-bg-neutral-bg shadow-sm">
     <div class="flex items-center gap-2 px-4 py-2 w-full overflow-hidden">
-      <div class="flex w-full gap-2 overflow-hidden cursor-pointer">
+      <div class="flex w-full gap-2 overflow-hidden cursor-pointer" @click="emit('open-detail')">
         <div
           v-tooltip.bottom="{
-            value: `${(props.data as RoomDetailHeader)?.room_type ? 'Group' : 'Profile'} details`,
+            value: `${(props.data as RoomDetailHeader)?.room_type === 'group' ? 'Group' : 'Profile'} details`,
             pt: {
               root: {
                 class: 'mx-10!',

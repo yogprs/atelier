@@ -118,20 +118,22 @@ async function request<T = any>(
   //   }
   // }
 
-  //   if (
-  //   body !== undefined &&
-  //   !(body instanceof FormData) &&
-  //   !headers.has("Content-Type")
-  // ) {
-  //   headers.set("Content-Type", "application/json");
-  // }
-
-  const isMultipart =
-    body && typeof body === "object" && "_parts" in (body as any);
-
-  if (!isMultipart) {
+  if (
+    body !== undefined &&
+    !(body instanceof FormData) &&
+    !headers.has("Content-Type")
+  ) {
     headers.set("Content-Type", "application/json");
   }
+
+  // console.log(body instanceof FormData);
+
+  // const isMultipart =
+  //   body && typeof body === "object" && "_parts" in (body as any);
+
+  // if (!isMultipart) {
+  //   headers.set("Content-Type", "application/json");
+  // }
 
   // Attach access token if available and not skipped
   if (!skipAuth) {
