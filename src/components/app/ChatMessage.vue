@@ -605,6 +605,7 @@ onUnmounted(() => {
           </Button>
           <InputText
             v-model="messageModel"
+            name="message"
             placeholder="Type a message"
             class="flex-1 bg-transparent border-0 shadow-none text-black/70! placeholder:text-black/50!"
             :pt="{
