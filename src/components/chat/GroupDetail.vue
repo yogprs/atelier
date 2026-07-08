@@ -10,6 +10,7 @@ import dayjs from "dayjs";
 import { Button, InputText } from "primevue";
 import { computed, onMounted, ref, watch } from "vue";
 import ImageCropper from "@/components/app/ImageCropper.vue";
+import DialogSearchMember from "../app/DialogSearchMember.vue";
 
 const props = defineProps<{
   group: {
@@ -37,6 +38,7 @@ const previewImage = ref<string | null>();
 
 const showCropper = ref<boolean>(false);
 const cropImage = ref<string>("");
+const showSearchMember = ref<boolean>(false);
 
 const groupMembers = computed(() => {
   const userId = auth.session?.user?.user_id;
@@ -64,6 +66,10 @@ const getUsername = (user: { id: string; username: string }) => {
 
 const openFilePicker = () => {
   fileInput.value?.click();
+};
+
+const setShowSearchMember = () => {
+  showSearchMember.value = true;
 };
 
 const handleFileChange = (event: Event) => {
@@ -183,7 +189,7 @@ watch(
 
 <template>
   <div
-    class="flex flex-col h-full bg-neutral-bg w-full max-w-md border-l border-neutral-border/50 overflow-hidden overflow-y-auto font-sans relative"
+    class="flex flex-col h-full bg-neutral-bg w-full max-w-md border-l border-neutral-border/50 overflow-hidden overflow-y-auto relative"
   >
     <!-- Header -->
     <div
@@ -466,11 +472,19 @@ watch(
 
     <!-- Participants -->
     <div class="flex flex-col mb-2 shadow-sm pb-2">
-      <div class="px-6 py-4 flex items-center justify-between">
+      <div class="px-6 py-2 flex items-center justify-between">
         <span class="text-sm"
           >{{ groupDetail?.member_count }} participants</span
         >
-        <Icon icon="carbon:search" class="text-xl cursor-pointer" />
+        <Button
+          @click="setShowSearchMember"
+          unstyled
+          class="flex gap-4 p-2 rounded-full cursor-pointer hover:scale-110 transition-all duration-500 hover:bg-[#F0F2FF]"
+        >
+          <template #icon>
+            <Icon icon="carbon:search" class="text-xl cursor-pointer" />
+          </template>
+        </Button>
       </div>
 
       <!-- Add participant button -->
@@ -541,6 +555,7 @@ watch(
         class="w-full flex items-center py-2"
       >
         <Button
+          @click="setShowSearchMember"
           unstyled
           class="w-full! flex! flex-col! gap-4 py-3! p-2 cursor-pointer transition-all duration-500 hover:bg-neutral-border/50"
         >
@@ -594,5 +609,9 @@ watch(
     :image-name="selectedFile?.name ?? ''"
     @close="showCropper = false"
     @save="uploadAvatar"
+  />
+  <DialogSearchMember
+    v-model:visible="showSearchMember"
+    :room-id="groupDetail?.id as string"
   />
 </template>
