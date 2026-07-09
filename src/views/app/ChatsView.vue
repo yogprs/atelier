@@ -8,7 +8,7 @@ import apiClient from "@/lib/apiClient";
 import { useRoomStore } from "@/stores/room";
 import { useWebSocketStore } from "@/stores/websocket";
 import type { ApiResponse } from "@/types/general";
-import type { ApiRoom, RoomDetail, RoomMember, RoomType } from "@/types/room";
+import type { ApiRoom, RoomMember, RoomType } from "@/types/room";
 import type { User } from "@/types/user";
 import { formatDate } from "@/utils/dateFormat";
 import { toTitleCase } from "@/utils/stringFormat";
@@ -30,7 +30,7 @@ const selectedRoom = ref<Pick<
 > | null>();
 const selectedRoomId = ref<string | null>();
 const selectedTargetUserId = ref<string | null>();
-const roomDetail = ref<RoomDetail | null>();
+// const roomDetail = ref<RoomDetail | null>();
 const userDetail = ref<User | null>();
 const showDialog = ref(false);
 const showDetail = ref(false);
@@ -82,18 +82,18 @@ const getRooms = async () => {
   }
 };
 
-const getRoomDetail = async () => {
-  if (!selectedRoom.value?.id) return;
-  try {
-    const response = await apiClient.get<ApiResponse<RoomDetail>>(
-      `/room/${selectedRoom.value?.id}`,
-    );
+// const getRoomDetail = async () => {
+//   if (!selectedRoom.value?.id) return;
+//   try {
+//     const response = await apiClient.get<ApiResponse<RoomDetail>>(
+//       `/room/${selectedRoom.value?.id}`,
+//     );
 
-    roomDetail.value = response.data;
-  } catch (error) {
-    console.error(error);
-  }
-};
+//     roomDetail.value = response.data;
+//   } catch (error) {
+//     console.error(error);
+//   }
+// };
 
 const getUser = async () => {
   if (!selectedRoom.value?.target_user_id) return;
@@ -117,9 +117,9 @@ watch(
     showDetail.value = false;
     if (selectedRoom.value?.room_type === "group") {
       userDetail.value = null;
-      getRoomDetail();
+      roomStore.getRoomDetail(selectedRoom.value?.id);
     } else {
-      roomDetail.value = null;
+      roomStore.roomDetail = null;
       getUser();
     }
   },
@@ -208,9 +208,18 @@ watch(
   () => roomStore.isUpdated,
   () => {
     if (!roomStore.isUpdated) return;
+
     getRooms();
-    getRoomDetail();
-    roomStore.setUpdated(false);
+
+    if (roomStore.updatedType === "update") {
+      roomStore.getRoomDetail(selectedRoom.value?.id as string);
+    } else if (roomStore.updatedType === "leave") {
+      selectedRoom.value = null;
+      selectedRoomId.value = null;
+      showDetail.value = false;
+    }
+
+    roomStore.setUpdated(false, null);
   },
   {
     immediate: true,
@@ -341,13 +350,17 @@ onUnmounted(() => {
             <ChatHeader
               @open-detail="showDetail = !showDetail"
               :data="{
-                id: (roomDetail?.id as string) ?? (userDetail?.id as string),
-                name: roomDetail?.name as string,
+                id:
+                  (roomStore.roomDetail?.id as string) ??
+                  (userDetail?.id as string),
+                name: roomStore.roomDetail?.name as string,
                 username: userDetail?.username as string,
-                room_type: roomDetail?.room_type as RoomType,
-                avatar: (roomDetail?.avatar as string) ?? userDetail?.avatar,
-                member_count: roomDetail?.member_count as number,
-                members: roomDetail?.members as RoomMember[],
+                room_type: roomStore.roomDetail?.room_type as RoomType,
+                avatar:
+                  (roomStore.roomDetail?.avatar as string) ??
+                  userDetail?.avatar,
+                member_count: roomStore.roomDetail?.member_count as number,
+                members: roomStore.roomDetail?.members as RoomMember[],
               }"
             />
 
@@ -375,9 +388,9 @@ onUnmounted(() => {
               @close="showDetail = false"
             />
             <GroupDetail
-              v-if="selectedRoom?.room_type === 'group' && roomDetail"
+              v-if="selectedRoom?.room_type === 'group' && roomStore.roomDetail"
               :group="{
-                id: roomDetail.id,
+                id: roomStore.roomDetail.id,
               }"
               @close="showDetail = false"
             />

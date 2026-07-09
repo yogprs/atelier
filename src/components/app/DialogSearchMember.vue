@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import apiClient from "@/lib/apiClient";
+import { useRoomStore } from "@/stores/room";
 import type { ApiResponse } from "@/types/general";
 import type { RoomDetail, RoomMember } from "@/types/room";
 import { Icon } from "@iconify/vue";
@@ -20,13 +21,14 @@ const visible = defineModel<boolean>("visible", {
   default: false,
 });
 
-const groupDetail = ref<RoomDetail>();
+const roomStore = useRoomStore();
+// const groupDetail = ref<RoomDetail>();
 const searchModel = ref<string>();
 
 const groupedUsers = computed(() => {
-  if (!groupDetail.value?.members) return {};
+  if (!roomStore.roomDetail?.members) return {};
 
-  const sorted = [...groupDetail.value?.members].sort((a, b) =>
+  const sorted = [...roomStore.roomDetail?.members].sort((a, b) =>
     a.username.localeCompare(b.username),
   );
 
@@ -56,25 +58,26 @@ const onBackdropClick = () => {
   }
 };
 
-const getRoomDetail = async () => {
-  if (!props.roomId) return;
-  try {
-    const response = await apiClient.get<ApiResponse<RoomDetail>>(
-      `/room/${props.roomId}`,
-    );
+// const getRoomDetail = async () => {
+//   if (!props.roomId) return;
+//   try {
+//     const response = await apiClient.get<ApiResponse<RoomDetail>>(
+//       `/room/${props.roomId}`,
+//     );
 
-    groupDetail.value = response.data;
-  } catch (error) {
-    console.error(error);
-  }
-};
+//     groupDetail.value = response.data;
+//   } catch (error) {
+//     console.error(error);
+//   }
+// };
 
 watch(
   () => visible.value,
   () => {
     if (!visible.value) return;
 
-    getRoomDetail();
+    // getRoomDetail();
+    roomStore.getRoomDetail(props.roomId);
   },
   {
     immediate: true,
@@ -152,7 +155,7 @@ watch(
               </InputGroup>
             </Form>
           </div>
-          <div class="overflow-hidden pt-5 rounded-b-xl">
+          <div class="overflow-hidden pt-5 pb-1 rounded-b-xl">
             <div
               class="scroll-user bg-neutral-inputBg h-fit max-h-112 overflow-y-auto"
             >

@@ -1,28 +1,37 @@
+import apiClient from "@/lib/apiClient";
+import type { ApiResponse } from "@/types/general";
+import type { RoomDetail } from "@/types/room";
 import { defineStore } from "pinia";
 
 interface RoomState {
-  // roomId: string | null;
-  // userId: string | null;
   isUpdated: boolean;
+  updatedType: "update" | "leave" | null;
+  roomDetail: RoomDetail | null;
 }
 
 export const useRoomStore = defineStore("room", {
   state: (): RoomState => ({
-    // roomId: null,
-    // userId: null,
     isUpdated: false,
+    updatedType: null,
+    roomDetail: null,
   }),
 
   actions: {
-    setUpdated(isUpdate: boolean) {
-      this.isUpdated = isUpdate;
+    async getRoomDetail(id: string) {
+      try {
+        const response = await apiClient.get<ApiResponse<RoomDetail>>(
+          `/room/${id}`,
+        );
+
+        this.roomDetail = response.data ?? null;
+      } catch (error) {
+        console.error(error);
+      }
     },
-    // getRoom() {
-    //   ((this.roomId = "test"), (this.userId = "test"));
-    // },
-    // setRoom(roomId: string | null, userId: string | null) {
-    //   this.roomId = roomId;
-    //   this.userId = userId;
-    // },
+
+    setUpdated(isUpdate: boolean, type: "update" | "leave" | null) {
+      this.isUpdated = isUpdate;
+      this.updatedType = type;
+    },
   },
 });
