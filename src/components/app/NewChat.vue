@@ -114,7 +114,7 @@ onMounted(() => {
 
     <div class="px-2 overflow-hidden">
       <div
-        class="scroll-user bg-neutral-inputBg shadow border border-neutral-300 rounded-xl mb-4 h-fit max-h-72 overflow-y-auto"
+        class="scroll-user bg-neutral-inputBg shadow border border-neutral-300 rounded-xl mb-4 h-fit max-h-84 overflow-y-auto"
       >
         <div v-for="(group, letter) in groupedUsers" :key="letter">
           <!-- Header Huruf -->
