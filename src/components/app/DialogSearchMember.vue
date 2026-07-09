@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import apiClient from "@/lib/apiClient";
 import { useRoomStore } from "@/stores/room";
-import type { ApiResponse } from "@/types/general";
-import type { RoomDetail, RoomMember } from "@/types/room";
+import type { RoomMember } from "@/types/room";
 import { Icon } from "@iconify/vue";
 import { Form } from "@primevue/forms";
 import { Button, Image, InputGroup, InputText } from "primevue";

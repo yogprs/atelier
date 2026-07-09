@@ -8,7 +8,7 @@ import type { User } from "@/types/user";
 import { Icon } from "@iconify/vue";
 import dayjs from "dayjs";
 import { Button, InputText, useToast } from "primevue";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ImageCropper from "@/components/app/ImageCropper.vue";
 import DialogSearchMember from "../app/DialogSearchMember.vue";
@@ -307,6 +307,7 @@ const getUser = async () => {
 
 const removeMemberGroup = async (memberId: string) => {
   try {
+    console.log(memberId);
   } catch (error) {
     console.error(error);
     toast.add({
