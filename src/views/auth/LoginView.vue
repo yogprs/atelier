@@ -243,6 +243,16 @@ const loginGoogle = (): void => {
                   label="Login to Atelier"
                   class="rounded-lg!"
                 />
+                <div class="flex justify-center items-center mt-1">
+                  <span class="text-sm font-medium text-black">Don't have an account?</span>
+                  <Button
+                    label="Register"
+                    variant="text"
+                    class="p-0! ml-1! active:bg-transparent! text-sm! font-bold! text-black! hover:underline!"
+                    size="small"
+                    @click="router.push('/auth/register')"
+                  />
+                </div>
               </Form>
             </div>
           </div>

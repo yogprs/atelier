@@ -41,6 +41,7 @@ export interface LastMessage {
   id: string;
   content: string;
   user_id: string;
+  user_name: string;
   message_type: string;
   timestamp: string;
 }

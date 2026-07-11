@@ -172,6 +172,7 @@ watch(
           id: msg.message_id ?? `temp-${Date.now()}`,
           content: msg.body ?? "",
           user_id: msg.sender_id ?? "",
+          user_name: msg.sender_name ?? "",
           message_type: msg.type ?? "text",
           timestamp: new Date(msg.timestamp ?? Date.now()).toISOString(),
         },
@@ -321,9 +322,12 @@ onUnmounted(() => {
                         : room?.target_username
                     }}</span>
                     <p class="text-xs font-normal text-slate-800 truncate">
-                      {{
-                        room?.last_message ? room?.last_message?.content : ""
-                      }}
+                      <span v-if="room?.last_message" class="font-medium">
+                        {{
+                          `${room?.last_message?.user_name ? `${room?.last_message?.user_name}:` : ""}`
+                        }}
+                      </span>
+                      {{ room?.last_message?.content }}
                     </p>
                   </div>
                   <div v-if="room?.last_message" class="flex flex-col gap-1">
