@@ -58,10 +58,7 @@ const onFormSubmit = async ({ valid, values }: FormSubmitEvent) => {
 
 const handleRegister = async (values: BodyRegister) => {
   try {
-    const response = await apiClient.post<RegisterResponse>(
-      "/users/register",
-      values,
-    );
+    await apiClient.post<RegisterResponse>("/users/register", values);
 
     toast.add({
       severity: "success",
@@ -240,7 +237,9 @@ const loginGoogle = (): void => {
                   class="rounded-lg!"
                 />
                 <div class="flex justify-center items-center mt-1">
-                  <span class="text-sm font-medium text-black">Already have an account?</span>
+                  <span class="text-sm font-medium text-black"
+                    >Already have an account?</span
+                  >
                   <Button
                     label="Login"
                     variant="text"
