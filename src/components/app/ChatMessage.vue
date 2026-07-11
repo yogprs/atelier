@@ -106,14 +106,21 @@ const openDocumentPicker = () => {
   documentInput.value?.click();
 };
 
+const pendingImagePreviews = ref<string[]>([]);
+
 const onSelectImages = (event: Event) => {
   const input = event.target as HTMLInputElement;
 
   if (!input.files) return;
 
-  pendingImages.value = Array.from(input.files);
+  const newFiles = Array.from(input.files);
 
-  console.log(pendingImages.value);
+  // Append to existing pending (tidak replace)
+  pendingImages.value = [...pendingImages.value, ...newFiles];
+
+  // Generate preview URL
+  const newPreviews = newFiles.map((f) => URL.createObjectURL(f));
+  pendingImagePreviews.value = [...pendingImagePreviews.value, ...newPreviews];
 
   input.value = "";
 };
@@ -123,11 +130,31 @@ const onSelectDocuments = (event: Event) => {
 
   if (!input.files) return;
 
-  pendingFiles.value = Array.from(input.files);
+  const newFiles = Array.from(input.files);
 
-  console.log(pendingFiles.value);
+  // Append to existing pending (tidak replace)
+  pendingFiles.value = [...pendingFiles.value, ...newFiles];
 
   input.value = "";
+};
+
+const removePendingImage = (index: number) => {
+  URL.revokeObjectURL(pendingImagePreviews.value[index]);
+  pendingImages.value = pendingImages.value.filter((_, i) => i !== index);
+  pendingImagePreviews.value = pendingImagePreviews.value.filter(
+    (_, i) => i !== index,
+  );
+};
+
+const removePendingFile = (index: number) => {
+  pendingFiles.value = pendingFiles.value.filter((_, i) => i !== index);
+};
+
+const clearAllPending = () => {
+  pendingImagePreviews.value.forEach((url) => URL.revokeObjectURL(url));
+  pendingImages.value = [];
+  pendingImagePreviews.value = [];
+  pendingFiles.value = [];
 };
 
 const toggleAttachment = (event: MouseEvent) => {
@@ -148,12 +175,12 @@ const toggleAttachment = (event: MouseEvent) => {
   items.value = [
     {
       label: "Document",
-      icon: "material-symbols:remove",
+      icon: "mdi:file-outline",
       action: openDocumentPicker,
     },
     {
       label: "Photos & Videos",
-      icon: "material-symbols:remove",
+      icon: "material-symbols:perm-media-rounded",
       action: openImagePicker,
     },
   ];
@@ -161,7 +188,7 @@ const toggleAttachment = (event: MouseEvent) => {
 };
 
 const handleSendMessage = async () => {
-  if (!messageModel.value) return;
+  // if (!messageModel.value) return;
   if (!roomId.value) {
     await createDirectMessage(props?.idUser as string, "text");
     return;
@@ -207,34 +234,65 @@ const createDirectMessage = async (
 const handleSendMessageHaveId = async () => {
   const hasText = messageModel.value && messageModel.value?.trim().length > 0;
   const hasImages = pendingImages.value && pendingImages.value?.length > 0;
-  const hasFiles = pendingFiles.value !== null;
-
-  if (!hasText && !hasImages && !hasFiles) return;
+  const hasFiles = pendingFiles.value && pendingFiles.value?.length > 0;
 
   const now = new Date().toISOString();
 
+  // Kirim gambar (optimistic update)
   if (hasImages) {
+    if (!hasImages) return;
     const content = hasText ? messageModel.value?.trim() : undefined;
-    const attachments = pendingImages.value.map((file) =>
-      URL.createObjectURL(file),
-    );
+    const attachments = [...pendingImagePreviews.value];
+
     const optimisticMessage: Message = {
       id: `temp-image-${Date.now()}`,
       room_id: roomId.value as string,
       sender_id: auth.session?.user?.user_id ?? "",
       sender_name: auth.session?.user?.username ?? "",
-      content: content || `🖼️ ${pendingImages.value?.length} image(s)`,
+      content: content as string,
+      // content: content || `🖼️ ${pendingImages.value?.length} image(s)`,
       message_type: "image",
       timestamp: now,
       attachments: attachments,
     };
 
-    await uploadImage(
-      roomId.value as string,
-      pendingImages.value,
-      messageModel.value as string,
-    );
+    messages.value = [...(messages.value ?? []), optimisticMessage];
+
+    const imagesToUpload = [...pendingImages.value];
+    const textContent = messageModel.value as string;
+
+    // Clear pending sebelum upload
+    clearAllPending();
+    messageModel.value = null;
+
+    await uploadImage(roomId.value as string, imagesToUpload, textContent);
+  } else if (hasFiles) {
+    if (!hasFiles) return;
+    // Optimistic message untuk file
+    const fileNames = pendingFiles.value.map((f) => f.name).join(", ");
+    const optimisticFileMessage: Message = {
+      id: `temp-file-${Date.now()}`,
+      room_id: roomId.value as string,
+      sender_id: auth.session?.user?.user_id ?? "",
+      sender_name: auth.session?.user?.username ?? "",
+      content: `📎 ${fileNames}`,
+      message_type: "file",
+      timestamp: now,
+    };
+
+    messages.value = [...(messages.value ?? []), optimisticFileMessage];
+
+    const filesToUpload = [...pendingFiles.value];
+    const textContent = messageModel.value as string;
+
+    // Clear pending sebelum upload
+    clearAllPending();
+    messageModel.value = null;
+
+    await uploadFiles(roomId.value as string, filesToUpload, textContent);
   } else {
+    if (!hasText) return;
+    // Kirim pesan teks biasa
     const payload = {
       type: "message_group",
       room_id: roomId.value as string,
@@ -261,11 +319,11 @@ const handleSendMessageHaveId = async () => {
     messages.value = [...messages.value!, newMessage];
 
     websocket.setLastMessage(payload);
+
+    messageModel.value = null;
   }
 
   scrollToDown();
-
-  messageModel.value = null;
 };
 
 const fetchMessage = async (additionalParams?: string, isLoadMore = false) => {
@@ -330,17 +388,37 @@ const uploadImage = async (room: string, images: File[], content?: string) => {
     }
 
     await apiClient.post("/message/upload", formData);
-
-    // if (hasMore.value && nextCursor.value) {
-    //   await fetchMessage(
-    //     `&next_cursor=${encodeURIComponent(nextCursor.value)}`,
-    //     true,
-    //   );
-    //   return;
-    // }
     await fetchMessage();
   } catch (error) {
     console.error(error);
+    toast.add({
+      severity: "error",
+      summary: "Gagal mengunggah gambar.",
+    });
+  }
+};
+
+const uploadFiles = async (room: string, files: File[], content?: string) => {
+  try {
+    const formData = new FormData();
+    formData.append("room_id", room);
+
+    files.forEach((file) => {
+      formData.append("files", file);
+    });
+
+    if (content) {
+      formData.append("content", content);
+    }
+
+    await apiClient.post("/message/upload", formData);
+    await fetchMessage();
+  } catch (error) {
+    console.error(error);
+    toast.add({
+      severity: "error",
+      summary: "Gagal mengunggah file.",
+    });
   }
 };
 
@@ -497,8 +575,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="w-full h-full pb-30 relative">
-    <div v-if="loadingMore" class="flex justify-center py-2">
+  <div class="w-full flex flex-col relative overflow-hidden" v-bind="$attrs">
+    <div
+      v-if="loadingMore"
+      class="absolute top-2 left-0 right-0 flex justify-center z-10"
+    >
       <ProgressSpinner
         aria-label="loading"
         stroke-width="14"
@@ -514,7 +595,7 @@ onUnmounted(() => {
     </div>
     <div
       ref="scrollMessage"
-      class="flex-1 w-full h-full overflow-y-auto scroll-message pb-2"
+      class="flex-1 w-full min-h-0 overflow-y-auto scroll-message pb-2"
     >
       <div :key="message?.id" v-for="(message, index) in messages">
         <!-- Date Separator -->
@@ -669,112 +750,249 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-    <!-- Button to latest -->
-    <Transition
-      enter-active-class="transition duration-200"
-      leave-active-class="transition duration-200"
-      enter-from-class="opacity-0 translate-y-2"
-      leave-to-class="opacity-0 translate-y-2"
-    >
-      <Button
-        v-if="showScrollToBottom"
-        @click="scrollToDown"
-        rounded
-        class="absolute! bottom-35 right-4 shadow-xl z-50 bg-primary! text-primary-contrast! border! border-neutral-300!"
+    <!-- Sticky bottom: pending preview + input bar -->
+    <div class="w-full bg-neutral-white shrink-0">
+      <!-- Button to latest -->
+      <Transition
+        enter-active-class="transition duration-200"
+        leave-active-class="transition duration-200"
+        enter-from-class="opacity-0 translate-y-2"
+        leave-to-class="opacity-0 translate-y-2"
       >
-        <template #icon>
-          <Icon icon="material-symbols:keyboard-arrow-down" class="text-xl" />
-        </template>
-      </Button>
-    </Transition>
-    <!-- Input -->
-    <div class="w-full h-full bg-transparent">
-      <Form @submit="handleSendMessage" class="h-12.5 px-2">
-        <InputGroup
-          class="bg-neutral-inputBg! border border-neutral-300 text-neutral-400! rounded-full h-12 overflow-hidden px-2 items-center"
+        <Button
+          v-if="showScrollToBottom"
+          @click="scrollToDown"
+          rounded
+          class="absolute! bottom-20 right-4 shadow-xl z-50 bg-primary! text-primary-contrast! border! border-neutral-300!"
         >
-          <Button
-            ref="attachmentButtonRef"
-            @click="toggleAttachment"
-            v-tooltip.top="{
-              value: 'Attach',
-              pt: {
-                arrow: {
-                  style: {
-                    borderBottomColor: 'var(--p-primary-color)',
-                  },
-                },
-                text: 'bg-primary! text-primary-contrast! text-sm! font-regular!',
-              },
-            }"
-            unstyled
-            class="flex gap-4 p-2 my-1 items-center rounded-full cursor-pointer transition-all duration-500 hover:bg-[#F0F2FF]"
+          <template #icon>
+            <Icon icon="material-symbols:keyboard-arrow-down" class="text-xl" />
+          </template>
+        </Button>
+      </Transition>
+      <!-- Input area -->
+      <div class="w-full bg-transparent pb-2">
+        <!-- Pending Attachments Preview (WhatsApp style) -->
+        <Transition
+          enter-active-class="transition-all duration-300 ease-out"
+          leave-active-class="transition-all duration-200 ease-in"
+          enter-from-class="opacity-0 translate-y-3"
+          leave-to-class="opacity-0 translate-y-3"
+        >
+          <div
+            v-if="pendingImages.length > 0 || pendingFiles.length > 0"
+            class="mx-2 mb-2 rounded-2xl border border-neutral-200 bg-white shadow-md overflow-hidden"
           >
-            <template #icon>
-              <span>
-                <Icon icon="material-symbols:add" class="size-6" />
+            <!-- Header bar -->
+            <div
+              class="flex items-center justify-between px-3 py-2 bg-neutral-50 border-b border-neutral-200"
+            >
+              <span
+                class="text-xs font-semibold text-neutral-500 uppercase tracking-wide"
+              >
+                {{ pendingImages.length + pendingFiles.length }} file(s)
               </span>
-            </template>
-          </Button>
+              <button
+                @click="clearAllPending"
+                class="text-xs text-red-400 hover:text-red-600 font-medium transition-colors cursor-pointer"
+              >
+                Delete All
+              </button>
+            </div>
 
-          <Button
-            v-tooltip.top="{
-              value: 'Emojis, GIFs, Stickers',
-              pt: {
-                arrow: {
-                  style: {
-                    borderBottomColor: 'var(--p-primary-color)',
-                  },
-                },
-                text: 'bg-primary! text-primary-contrast! text-sm! font-regular!',
-              },
-            }"
-            unstyled
-            class="flex gap-4 p-2 my-1 items-center rounded-full cursor-pointer transition-all duration-500 hover:bg-[#F0F2FF]"
-          >
-            <template #icon>
-              <span>
-                <Icon icon="material-symbols:sticker-outline" class="size-6" />
-              </span>
-            </template>
-          </Button>
-          <InputText
-            v-model="messageModel"
-            name="message"
-            placeholder="Type a message"
-            class="flex-1 bg-transparent border-0 shadow-none text-black/70! placeholder:text-black/50!"
-            :pt="{
-              root: {
-                class:
-                  '!bg-transparent !border-0 !shadow-none focus:!ring-0 px-3',
-              },
-            }"
-          />
+            <!-- Image Previews -->
+            <div
+              v-if="pendingImages.length > 0"
+              class="flex gap-2 p-3 flex-wrap"
+            >
+              <div
+                v-for="(preview, i) in pendingImagePreviews"
+                :key="i"
+                class="relative group shrink-0"
+              >
+                <div
+                  class="w-16 h-16 rounded-xl overflow-hidden border border-neutral-200 shadow-sm"
+                >
+                  <img
+                    :src="preview"
+                    :alt="pendingImages[i]?.name"
+                    class="w-full h-full object-cover"
+                  />
+                </div>
+                <!-- Remove button -->
+                <button
+                  @click="removePendingImage(i)"
+                  class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-md transition-all opacity-0 group-hover:opacity-100 cursor-pointer z-10"
+                >
+                  <Icon icon="material-symbols:close" class="size-3" />
+                </button>
+                <!-- File name -->
+                <p
+                  class="mt-1 text-[9px] text-neutral-400 truncate w-16 text-center"
+                >
+                  {{ pendingImages[i]?.name }}
+                </p>
+              </div>
+            </div>
 
-          <Button
-            type="submit"
-            v-tooltip.top="{
-              value: 'Send',
-              pt: {
-                arrow: {
-                  style: {
-                    borderBottomColor: 'var(--p-primary-color)',
-                  },
-                },
-                text: 'bg-primary! text-primary-contrast! text-sm! font-regular!',
-              },
+            <!-- Document Previews -->
+            <div
+              v-if="pendingFiles.length > 0"
+              class="flex flex-col gap-1 px-3 pb-3"
+              :class="{
+                'pt-0': pendingImages.length > 0,
+                'pt-3': pendingImages.length === 0,
+              }"
+            >
+              <div
+                v-for="(file, i) in pendingFiles"
+                :key="i"
+                class="flex items-center gap-3 px-3 py-2 rounded-xl bg-neutral-50 border border-neutral-200 group relative"
+              >
+                <!-- File icon -->
+                <div
+                  class="w-9 h-9 rounded-lg bg-primary-lighter/20 flex items-center justify-center shrink-0"
+                >
+                  <Icon
+                    :icon="
+                      file.type.includes('pdf')
+                        ? 'material-symbols:picture-as-pdf'
+                        : file.type.includes('word') ||
+                            file.name.endsWith('.docx')
+                          ? 'material-symbols:description'
+                          : file.type.includes('sheet') ||
+                              file.name.endsWith('.xlsx')
+                            ? 'material-symbols:table'
+                            : 'material-symbols:attach-file'
+                    "
+                    class="size-5 text-primary-base"
+                  />
+                </div>
+                <!-- File info -->
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-medium text-neutral-700 truncate">
+                    {{ file.name }}
+                  </p>
+                  <p class="text-[10px] text-neutral-400">
+                    {{ (file.size / 1024).toFixed(1) }} KB
+                  </p>
+                </div>
+                <!-- Remove -->
+                <button
+                  @click="removePendingFile(i)"
+                  class="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 text-red-500 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                >
+                  <Icon icon="material-symbols:close" class="size-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
+
+        <Form @submit="handleSendMessage" class="h-12.5 px-2">
+          <InputGroup
+            class="bg-neutral-inputBg! border border-neutral-300 text-neutral-400! rounded-full h-12 overflow-hidden px-2 items-center"
+            :class="{
+              'border-primary-light! ring-1! ring-primary-light/30!':
+                pendingImages.length > 0 || pendingFiles.length > 0,
             }"
-            unstyled
-            class="flex gap-4 p-2 my-1 items-center rounded-full cursor-pointer transition-all duration-500 bg-primary-lighter hover:bg-primary-lighter/80"
           >
-            <template #icon>
-              <span>
-                <Icon icon="material-symbols:send" class="size-6 text-white" />
-              </span>
-            </template>
-          </Button>
-        </InputGroup>
-      </Form>
+            <Button
+              ref="attachmentButtonRef"
+              @click="toggleAttachment"
+              v-tooltip.top="{
+                value: 'Attach',
+                pt: {
+                  arrow: {
+                    style: {
+                      borderBottomColor: 'var(--p-primary-color)',
+                    },
+                  },
+                  text: 'bg-primary! text-primary-contrast! text-sm! font-regular!',
+                },
+              }"
+              unstyled
+              class="flex gap-4 p-2 my-1 items-center rounded-full cursor-pointer transition-all duration-500 hover:bg-[#F0F2FF]"
+            >
+              <template #icon>
+                <span class="relative">
+                  <Icon icon="material-symbols:add" class="size-6" />
+                  <!-- Badge jumlah pending -->
+                  <span
+                    v-if="pendingImages.length + pendingFiles.length > 0"
+                    class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-primary-lighter text-white text-[9px] font-bold flex items-center justify-center leading-none"
+                  >
+                    {{ pendingImages.length + pendingFiles.length }}
+                  </span>
+                </span>
+              </template>
+            </Button>
+
+            <Button
+              v-tooltip.top="{
+                value: 'Emojis, GIFs, Stickers',
+                pt: {
+                  arrow: {
+                    style: {
+                      borderBottomColor: 'var(--p-primary-color)',
+                    },
+                  },
+                  text: 'bg-primary! text-primary-contrast! text-sm! font-regular!',
+                },
+              }"
+              unstyled
+              class="flex gap-4 p-2 my-1 items-center rounded-full cursor-pointer transition-all duration-500 hover:bg-[#F0F2FF]"
+            >
+              <template #icon>
+                <span>
+                  <Icon
+                    icon="material-symbols:sticker-outline"
+                    class="size-6"
+                  />
+                </span>
+              </template>
+            </Button>
+            <InputText
+              v-model="messageModel"
+              name="message"
+              placeholder="Type a message"
+              class="flex-1 bg-transparent border-0 shadow-none text-black/70! placeholder:text-black/50!"
+              :pt="{
+                root: {
+                  class:
+                    '!bg-transparent !border-0 !shadow-none focus:!ring-0 px-3',
+                },
+              }"
+            />
+
+            <Button
+              type="submit"
+              v-tooltip.top="{
+                value: 'Send',
+                pt: {
+                  arrow: {
+                    style: {
+                      borderBottomColor: 'var(--p-primary-color)',
+                    },
+                  },
+                  text: 'bg-primary! text-primary-contrast! text-sm! font-regular!',
+                },
+              }"
+              unstyled
+              class="flex gap-4 p-2 my-1 items-center rounded-full cursor-pointer transition-all duration-500 bg-primary-lighter hover:bg-primary-lighter/80"
+            >
+              <template #icon>
+                <span>
+                  <Icon
+                    icon="material-symbols:send"
+                    class="size-6 text-white"
+                  />
+                </span>
+              </template>
+            </Button>
+          </InputGroup>
+        </Form>
+      </div>
     </div>
   </div>
 
