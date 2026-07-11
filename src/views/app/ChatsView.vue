@@ -346,7 +346,7 @@ onUnmounted(() => {
         <div
           class="flex flex-col w-full h-full min-w-0 bg-neutral-white shadow-xl relative flex-1"
         >
-          <div v-if="selectedRoom" class="w-full h-full">
+          <div v-if="selectedRoom" class="w-full h-full flex flex-col min-h-0">
             <ChatHeader
               @open-detail="showDetail = !showDetail"
               :data="{
@@ -365,6 +365,7 @@ onUnmounted(() => {
             />
 
             <ChatMessage
+              class="flex-1 min-h-0"
               :id-user="selectedTargetUserId as string"
               :id-room="selectedRoomId as string"
             />

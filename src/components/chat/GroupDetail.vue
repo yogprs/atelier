@@ -102,7 +102,8 @@ const getUsername = (user: { id: string; username: string }) => {
 const toggleContextMember = (event: MouseEvent, member: RoomMember) => {
   event.preventDefault();
   event.stopPropagation();
-  if (member.user_id === auth.session?.user?.user_id) return;
+  const memberIsAuthor = roomStore.roomDetail?.created_by === member.user_id;
+  if (member.user_id === auth.session?.user?.user_id || memberIsAuthor) return;
 
   if (!isSessionAdmin.value) return;
 
@@ -763,7 +764,9 @@ watch(
             </div>
             <span
               v-if="
-                member.user_id !== auth.session?.user?.user_id && isSessionAdmin
+                member.user_id !== auth.session?.user?.user_id &&
+                isSessionAdmin &&
+                roomStore.roomDetail?.created_by !== member.user_id
               "
               @click.stop="toggleContextMember($event, member)"
               class="hidden group-hover:block transition-all"
