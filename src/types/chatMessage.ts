@@ -29,3 +29,15 @@ export interface Message {
   timestamp: string;
   attachments?: string[];
 }
+
+export interface PendingMessage {
+  id: string;
+  sender_id: string;
+  sender_name: string;
+  message_type: "image";
+  content: string;
+  attachments: string[];
+  files: File[];
+  timestamp: string;
+  status: "pending" | "failed" | "sent";
+}

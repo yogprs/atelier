@@ -41,6 +41,24 @@ const messageModel = ref<string | null>();
 const lastProcessedTriggerRef = ref<number>(websocket.triggerUpdate);
 const loadingMore = ref<boolean>(false);
 const showScrollToBottom = ref<boolean>(false);
+const pendingImages = ref<File[]>([]);
+const pendingFiles = ref<File[]>([]);
+const visibleAttachment = ref<boolean>(false);
+const attachmentButtonRef = ref<any>(null);
+const imageInput = ref<HTMLInputElement | null>(null);
+const documentInput = ref<HTMLInputElement | null>(null);
+
+const menuPosition = ref({
+  top: 0,
+  left: 0,
+});
+const items = ref<
+  {
+    label: string;
+    icon?: string;
+    action?: () => void;
+  }[]
+>();
 
 const handleScroll = async (event: Event) => {
   const el = event.target as HTMLElement;
@@ -78,6 +96,68 @@ const showingDate = (
   const previousDate =
     index > 0 ? dayjs(allTimestamp[index - 1]).format("YYYY-MM-DD") : null;
   return currentDate !== previousDate;
+};
+
+const openImagePicker = () => {
+  imageInput.value?.click();
+};
+
+const openDocumentPicker = () => {
+  documentInput.value?.click();
+};
+
+const onSelectImages = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+
+  if (!input.files) return;
+
+  pendingImages.value = Array.from(input.files);
+
+  console.log(pendingImages.value);
+
+  input.value = "";
+};
+
+const onSelectDocuments = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+
+  if (!input.files) return;
+
+  pendingFiles.value = Array.from(input.files);
+
+  console.log(pendingFiles.value);
+
+  input.value = "";
+};
+
+const toggleAttachment = (event: MouseEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+
+  const el = attachmentButtonRef.value?.$el ?? attachmentButtonRef.value;
+
+  if (!el) return;
+
+  const rect = el.getBoundingClientRect();
+
+  menuPosition.value = {
+    top: rect.top - 115,
+    left: rect.left - 50,
+  };
+
+  items.value = [
+    {
+      label: "Document",
+      icon: "material-symbols:remove",
+      action: openDocumentPicker,
+    },
+    {
+      label: "Photos & Videos",
+      icon: "material-symbols:remove",
+      action: openImagePicker,
+    },
+  ];
+  visibleAttachment.value = !visibleAttachment.value;
 };
 
 const handleSendMessage = async () => {
@@ -126,39 +206,64 @@ const createDirectMessage = async (
 
 const handleSendMessageHaveId = async () => {
   const hasText = messageModel.value && messageModel.value?.trim().length > 0;
+  const hasImages = pendingImages.value && pendingImages.value?.length > 0;
+  const hasFiles = pendingFiles.value !== null;
 
-  if (!hasText) return;
+  if (!hasText && !hasImages && !hasFiles) return;
 
   const now = new Date().toISOString();
 
-  const payload = {
-    type: "message_group",
-    room_id: roomId.value as string,
-    data: {
-      room_id: roomId.value,
-      content: messageModel.value,
+  if (hasImages) {
+    const content = hasText ? messageModel.value?.trim() : undefined;
+    const attachments = pendingImages.value.map((file) =>
+      URL.createObjectURL(file),
+    );
+    const optimisticMessage: Message = {
+      id: `temp-image-${Date.now()}`,
+      room_id: roomId.value as string,
+      sender_id: auth.session?.user?.user_id ?? "",
+      sender_name: auth.session?.user?.username ?? "",
+      content: content || `🖼️ ${pendingImages.value?.length} image(s)`,
+      message_type: "image",
+      timestamp: now,
+      attachments: attachments,
+    };
+
+    await uploadImage(
+      roomId.value as string,
+      pendingImages.value,
+      messageModel.value as string,
+    );
+  } else {
+    const payload = {
+      type: "message_group",
+      room_id: roomId.value as string,
+      data: {
+        room_id: roomId.value,
+        content: messageModel.value,
+        message_type: "text",
+        sender_name: auth.session?.user?.username,
+      },
+    };
+
+    websocket.send(payload);
+
+    const newMessage: Message = {
+      id: `temp-${Date.now()}`,
+      room_id: roomId.value as string,
+      sender_id: auth.session?.user?.user_id || "",
+      sender_name: auth.session?.user?.username || "",
+      content: messageModel.value as string,
       message_type: "text",
-      sender_name: auth.session?.user?.username,
-    },
-  };
+      timestamp: now,
+    };
 
-  websocket.send(payload);
+    messages.value = [...messages.value!, newMessage];
 
-  const newMessage: Message = {
-    id: `temp-${Date.now()}`,
-    room_id: roomId.value as string,
-    sender_id: auth.session?.user?.user_id || "",
-    sender_name: auth.session?.user?.username || "",
-    content: messageModel.value as string,
-    message_type: "text",
-    timestamp: now,
-  };
-
-  messages.value = [...messages.value!, newMessage];
+    websocket.setLastMessage(payload);
+  }
 
   scrollToDown();
-
-  websocket.setLastMessage(payload);
 
   messageModel.value = null;
 };
@@ -208,6 +313,34 @@ const fetchMessage = async (additionalParams?: string, isLoadMore = false) => {
   } finally {
     loadingMessage.value = false;
     loadingMore.value = false;
+  }
+};
+
+const uploadImage = async (room: string, images: File[], content?: string) => {
+  try {
+    const formData = new FormData();
+    formData.append("room_id", room);
+
+    images.forEach((image) => {
+      formData.append("images", image);
+    });
+
+    if (content) {
+      formData.append("content", content);
+    }
+
+    await apiClient.post("/message/upload", formData);
+
+    // if (hasMore.value && nextCursor.value) {
+    //   await fetchMessage(
+    //     `&next_cursor=${encodeURIComponent(nextCursor.value)}`,
+    //     true,
+    //   );
+    //   return;
+    // }
+    await fetchMessage();
+  } catch (error) {
+    console.error(error);
   }
 };
 
@@ -561,6 +694,8 @@ onUnmounted(() => {
           class="bg-neutral-inputBg! border border-neutral-300 text-neutral-400! rounded-full h-12 overflow-hidden px-2 items-center"
         >
           <Button
+            ref="attachmentButtonRef"
+            @click="toggleAttachment"
             v-tooltip.top="{
               value: 'Attach',
               pt: {
@@ -640,6 +775,53 @@ onUnmounted(() => {
           </Button>
         </InputGroup>
       </Form>
+    </div>
+  </div>
+
+  <!-- Hidden File Inputs -->
+  <input
+    ref="imageInput"
+    type="file"
+    accept="image/*,video/*"
+    multiple
+    class="hidden"
+    @change="onSelectImages"
+  />
+
+  <input
+    ref="documentInput"
+    type="file"
+    multiple
+    class="hidden"
+    @change="onSelectDocuments"
+  />
+
+  <!-- Dialog Attachments -->
+  <div
+    v-if="visibleAttachment"
+    class="fixed inset-0 z-999"
+    @click="visibleAttachment = false"
+  >
+    <div
+      class="absolute bg-white rounded-xl shadow-xl border py-2 min-w-40"
+      :style="{
+        top: `${menuPosition.top}px`,
+        left: `${menuPosition.left}px`,
+      }"
+      @click.stop
+    >
+      <button
+        v-for="item in items"
+        :key="item.label"
+        @click="
+          item.action?.();
+          visibleAttachment = false;
+        "
+        class="w-full px-4 py-3 flex items-center gap-3 hover:bg-neutral-100 text-sm cursor-pointer"
+      >
+        <Icon v-if="item.icon" :icon="item.icon" />
+        <span>{{ item.label }}</span>
+      </button>
     </div>
   </div>
 </template>
