@@ -23,7 +23,8 @@ const membersFormat = (members: RoomMember[]) => {
 
 watch(
   () => props.data,
-  () => {
+  (newData, oldData) => {
+    if (newData?.id === oldData?.id) return;
     showPreviewText.value = true;
 
     clearTimeout(timer);
@@ -39,7 +40,10 @@ watch(
 <template>
   <div class="w-full bg-bg-neutral-bg shadow-sm">
     <div class="flex items-center gap-2 px-4 py-2 w-full overflow-hidden">
-      <div class="flex w-full gap-2 overflow-hidden cursor-pointer" @click="emit('open-detail')">
+      <div
+        class="flex w-full gap-2 overflow-hidden cursor-pointer"
+        @click="emit('open-detail')"
+      >
         <div
           v-tooltip.bottom="{
             value: `${(props.data as RoomDetailHeader)?.room_type === 'group' ? 'Group' : 'Profile'} details`,

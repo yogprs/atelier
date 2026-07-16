@@ -11,7 +11,7 @@ import { Button, InputText, useToast } from "primevue";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ImageCropper from "@/components/app/ImageCropper.vue";
-import DialogSearchMember from "../app/DialogSearchMember.vue";
+import DialogSearchMember from "../DialogSearchMember.vue";
 
 const MENU_WIDTH = 240;
 const MENU_HEIGHT = 180;
@@ -336,7 +336,7 @@ const uploadAvatar = async (file: File) => {
     roomStore.getRoomDetail(roomStore.roomDetail?.id as string);
     roomStore.setUpdated(true, "update");
   } catch (err) {
-    console.log(err);
+    console.error(err);
   }
 };
 

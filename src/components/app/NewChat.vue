@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import apiClient from "@/lib/apiClient";
+import { useRoomStore } from "@/stores/room";
 import type { ApiResponse } from "@/types/general";
 import type { User } from "@/types/user";
 import { Icon } from "@iconify/vue";
@@ -8,9 +9,11 @@ import { Button, Image, InputGroup, InputText } from "primevue";
 import { computed, onMounted, ref } from "vue";
 
 const emit = defineEmits<{
-  (e: "change-type", title: "direct" | "group"): void;
+  (e: "change-type", title: "direct" | "groupMember" | "group"): void;
+  (e: "visible", visible: boolean): void;
 }>();
 
+const roomStore = useRoomStore();
 const searchModel = ref<string>();
 const users = ref<User[]>();
 
@@ -38,7 +41,17 @@ const groupedUsers = computed(() => {
 });
 
 const handleNewGroup = () => {
-  emit("change-type", "group");
+  emit("change-type", "groupMember");
+};
+
+const toggleUser = (userId: string) => {
+  roomStore.setSelectedRoom({
+    id: null,
+    targetUserId: userId,
+    roomType: "direct",
+  });
+
+  emit("visible", false);
 };
 
 const getUsers = async () => {
@@ -127,6 +140,7 @@ onMounted(() => {
           <!-- User -->
           <div v-for="user in group" :key="user.id">
             <Button
+              @click="toggleUser(user.id)"
               unstyled
               class="w-full hover:bg-neutral-border/50 transition-colors cursor-pointer"
             >

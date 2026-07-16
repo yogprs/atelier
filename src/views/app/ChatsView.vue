@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import GroupDetail from "@/components/app/chat/GroupDetail.vue";
+import UserDetail from "@/components/app/chat/UserDetail.vue";
 import ChatHeader from "@/components/app/ChatHeader.vue";
 import ChatMessage from "@/components/app/ChatMessage.vue";
 import DialogNewChat from "@/components/app/DialogNewChat.vue";
-import GroupDetail from "@/components/chat/GroupDetail.vue";
-import UserDetail from "@/components/chat/UserDetail.vue";
 import apiClient from "@/lib/apiClient";
+import { useAuthStore } from "@/stores/auth";
 import { useRoomStore } from "@/stores/room";
 import { useWebSocketStore } from "@/stores/websocket";
 import type { ApiResponse } from "@/types/general";
@@ -14,9 +15,10 @@ import { formatDate } from "@/utils/dateFormat";
 import { toTitleCase } from "@/utils/stringFormat";
 import { Icon } from "@iconify/vue";
 import { Button, Image } from "primevue";
-import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, ref, watch } from "vue";
 
 const websocket = useWebSocketStore();
+const auth = useAuthStore();
 const roomStore = useRoomStore();
 
 const scrollChat = ref<any>(null);
@@ -24,12 +26,12 @@ const scrollChat = ref<any>(null);
 const rooms = ref<ApiRoom[]>();
 const loading = ref<boolean>();
 
-const selectedRoom = ref<Pick<
-  ApiRoom,
-  "id" | "target_user_id" | "room_type"
-> | null>();
-const selectedRoomId = ref<string | null>();
-const selectedTargetUserId = ref<string | null>();
+// const selectedRoom = ref<Pick<
+//   ApiRoom,
+//   "id" | "target_user_id" | "room_type"
+// > | null>();
+// const selectedRoomId = ref<string | null>();
+// const selectedTargetUserId = ref<string | null>();
 // const roomDetail = ref<RoomDetail | null>();
 const userDetail = ref<User | null>();
 const showDialog = ref(false);
@@ -41,18 +43,33 @@ onMounted(() => {
   getRooms();
 });
 
-const handleKeyDown = (event: KeyboardEvent): void => {
-  if (event.key === "Escape") {
-    if (selectedRoom.value) {
-      selectedRoom.value = null;
-      selectedRoomId.value = null;
-      selectedTargetUserId.value = null;
-    }
-  }
+const getLastMessageUser = (id: string, username: string) => {
+  if (!username && !id) return "";
+  const isSession = auth.session?.user?.user_id === id;
+  return `${isSession ? "You" : username}:`;
 };
+
+// const handleKeyDown = (event: KeyboardEvent): void => {
+//   if (event.key === "Escape") {
+//     if (selectedRoom.value) {
+//       selectedRoom.value = null;
+//       selectedRoomId.value = null;
+//       selectedTargetUserId.value = null;
+//     }
+//   }
+// };
 
 const toggleShowDialog = () => {
   showDialog.value = true;
+};
+
+const activeRoom = (room: ApiRoom): boolean => {
+  if (roomStore.selectedRoom?.id) {
+    return roomStore.selectedRoom?.id === room?.id;
+  } else if (roomStore.selectedRoom?.targetUserId) {
+    return roomStore.selectedRoom?.targetUserId === room?.target_user_id;
+  }
+  return false;
 };
 
 const scrollToTop = async () => {
@@ -63,11 +80,16 @@ const scrollToTop = async () => {
 };
 
 const selectRoom = (idRoom: string, idUser: string, roomType: RoomType) => {
-  selectedRoom.value = {
+  roomStore.setSelectedRoom({
     id: idRoom,
-    target_user_id: idUser ?? null,
-    room_type: roomType,
-  };
+    targetUserId: idUser ?? null,
+    roomType: roomType,
+  });
+  // selectedRoom.value = {
+  //   id: idRoom,
+  //   target_user_id: idUser ?? null,
+  //   room_type: roomType,
+  // };
 };
 
 const getRooms = async () => {
@@ -96,10 +118,11 @@ const getRooms = async () => {
 // };
 
 const getUser = async () => {
-  if (!selectedRoom.value?.target_user_id) return;
+  // if (!selectedRoom.value?.target_user_id) return;
+  if (!roomStore.selectedRoom?.targetUserId) return;
   try {
     const response = await apiClient.get<ApiResponse<User>>(
-      `/users/${selectedRoom.value?.target_user_id}`,
+      `/users/${roomStore.selectedRoom?.targetUserId}`,
     );
 
     userDetail.value = response.data;
@@ -109,15 +132,18 @@ const getUser = async () => {
 };
 
 watch(
-  () => selectedRoom.value,
-  () => {
-    if (selectedRoom.value?.id === selectedRoomId.value) return;
-    selectedRoomId.value = selectedRoom.value?.id;
-    selectedTargetUserId.value = selectedRoom.value?.target_user_id;
+  () => roomStore.selectedRoom,
+  (newRoom, oldRoom) => {
+    if (
+      newRoom?.id === oldRoom?.id &&
+      newRoom?.targetUserId === oldRoom?.targetUserId
+    )
+      return;
+
     showDetail.value = false;
-    if (selectedRoom.value?.room_type === "group") {
+    if (roomStore.selectedRoom?.roomType === "group") {
       userDetail.value = null;
-      roomStore.getRoomDetail(selectedRoom.value?.id);
+      roomStore.getRoomDetail(roomStore.selectedRoom?.id as string);
     } else {
       roomStore.roomDetail = null;
       getUser();
@@ -127,6 +153,26 @@ watch(
     immediate: true,
   },
 );
+
+// watch(
+//   () => selectedRoom.value,
+//   () => {
+//     if (selectedRoom.value?.id === selectedRoomId.value) return;
+//     selectedRoomId.value = selectedRoom.value?.id;
+//     selectedTargetUserId.value = selectedRoom.value?.target_user_id;
+//     showDetail.value = false;
+//     if (selectedRoom.value?.room_type === "group") {
+//       userDetail.value = null;
+//       roomStore.getRoomDetail(selectedRoom.value?.id);
+//     } else {
+//       roomStore.roomDetail = null;
+//       getUser();
+//     }
+//   },
+//   {
+//     immediate: true,
+//   },
+// );
 
 watch(
   () => websocket.triggerUpdate,
@@ -213,11 +259,14 @@ watch(
     getRooms();
 
     if (roomStore.updatedType === "update") {
-      roomStore.getRoomDetail(selectedRoom.value?.id as string);
+      roomStore.getRoomDetail(roomStore.selectedRoom?.id as string);
     } else if (roomStore.updatedType === "leave") {
-      selectedRoom.value = null;
-      selectedRoomId.value = null;
+      roomStore.setSelectedRoom(null);
       showDetail.value = false;
+    } else if (roomStore.updatedType === "create") {
+      if (!roomStore.selectedMembers || roomStore.selectedMembers?.length === 0)
+        return;
+      roomStore.setSelectedMembers(null);
     }
 
     roomStore.setUpdated(false, null);
@@ -227,13 +276,13 @@ watch(
   },
 );
 
-onMounted(() => {
-  window.addEventListener("keydown", handleKeyDown);
-});
+// onMounted(() => {
+//   window.addEventListener("keydown", handleKeyDown);
+// });
 
-onUnmounted(() => {
-  window.removeEventListener("keydown", handleKeyDown);
-});
+// onUnmounted(() => {
+//   window.removeEventListener("keydown", handleKeyDown);
+// });
 </script>
 
 <template>
@@ -296,7 +345,7 @@ onUnmounted(() => {
                 @click="
                   selectRoom(room.id, room?.target_user_id, room.room_type)
                 "
-                :class="`flex flex-row gap-2 p-2 rounded-xl group items-center hover:bg-neutral-border/40 ${selectedRoom?.id === room?.id ? 'bg-neutral-border/40' : ''} transition-all duration-500 cursor-pointer`"
+                :class="`flex flex-row gap-2 p-2 rounded-xl group items-center hover:bg-neutral-border/40 ${activeRoom(room) ? 'bg-neutral-border/40' : 'bg-transparent'} transition-all duration-500 cursor-pointer`"
               >
                 <div class="relative size-12">
                   <div
@@ -324,7 +373,10 @@ onUnmounted(() => {
                     <p class="text-xs font-normal text-slate-800 truncate">
                       <span v-if="room?.last_message" class="font-medium">
                         {{
-                          `${room?.last_message?.user_name ? `${room?.last_message?.user_name}:` : ""}`
+                          getLastMessageUser(
+                            room.last_message.user_id,
+                            room.last_message.user_name,
+                          )
                         }}
                       </span>
                       {{ room?.last_message?.content }}
@@ -350,7 +402,10 @@ onUnmounted(() => {
         <div
           class="flex flex-col w-full h-full min-w-0 bg-neutral-white shadow-xl relative flex-1"
         >
-          <div v-if="selectedRoom" class="w-full h-full flex flex-col min-h-0">
+          <div
+            v-if="roomStore.selectedRoom"
+            class="w-full h-full flex flex-col min-h-0"
+          >
             <ChatHeader
               @open-detail="showDetail = !showDetail"
               :data="{
@@ -370,8 +425,8 @@ onUnmounted(() => {
 
             <ChatMessage
               class="flex-1 min-h-0"
-              :id-user="selectedTargetUserId as string"
-              :id-room="selectedRoomId as string"
+              :id-user="roomStore.selectedRoom?.targetUserId as string"
+              :id-room="roomStore.selectedRoom?.id as string"
             />
           </div>
         </div>
@@ -379,11 +434,11 @@ onUnmounted(() => {
         <!-- Right Sidebar (Detail) Overlay -->
         <Transition name="slide-right">
           <div
-            v-if="showDetail && selectedRoom"
+            v-if="showDetail && roomStore.selectedRoom"
             class="absolute right-0 top-0 h-full w-full max-w-md z-50 bg-white shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)]"
           >
             <UserDetail
-              v-if="selectedRoom?.room_type === 'direct' && userDetail"
+              v-if="roomStore.selectedRoom?.roomType === 'direct' && userDetail"
               :user="{
                 name: userDetail.username,
                 phone: userDetail.email,
@@ -393,7 +448,10 @@ onUnmounted(() => {
               @close="showDetail = false"
             />
             <GroupDetail
-              v-if="selectedRoom?.room_type === 'group' && roomStore.roomDetail"
+              v-if="
+                roomStore.selectedRoom?.roomType === 'group' &&
+                roomStore.roomDetail
+              "
               :group="{
                 id: roomStore.roomDetail.id,
               }"
