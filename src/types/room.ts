@@ -59,3 +59,11 @@ export interface RoomMessage {
   has_more?: boolean;
   error?: string;
 }
+
+export interface BodyCreateGroup {
+  name: string;
+  description?: string;
+  room_type: "group";
+  is_private: boolean;
+  members: string[];
+}

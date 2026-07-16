@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DialogEditProfile from "./DialogEditProfile.vue";
 import apiClient from "@/lib/apiClient";
 import { useAuthStore } from "@/stores/auth";
 import type { ApiResponse } from "@/types/general";
@@ -40,6 +41,7 @@ const menus = [
 
 const op = ref();
 const notificationsEnabled = ref(true);
+const showEditProfile = ref(false);
 
 const toggleProfileMenu = (event: Event) => {
   op.value.toggle(event);
@@ -138,6 +140,7 @@ onMounted(() => {
             <div class="flex flex-col gap-1">
               <Button
                 unstyled
+                @click="showEditProfile = true"
                 class="flex items-center gap-3 p-2 rounded-lg hover:bg-[#F0F2FF] hover:text-primary-base transition-colors w-full text-left cursor-pointer group"
               >
                 <Icon
@@ -232,6 +235,9 @@ onMounted(() => {
         </Popover>
       </div>
     </div>
+
+    <!-- Edit Profile Dialog -->
+    <DialogEditProfile v-model:visible="showEditProfile" @profile-updated="getProfile" />
   </nav>
 </template>
 

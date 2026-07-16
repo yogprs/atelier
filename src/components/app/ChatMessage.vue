@@ -23,9 +23,12 @@ import dayjs from "dayjs";
 import { Icon } from "@iconify/vue";
 import { useWebSocketStore } from "@/stores/websocket";
 import { Form } from "@primevue/forms";
+import type { CheckDirect } from "@/types/direct";
+import { useRoomStore } from "@/stores/room";
 
 const toast = useToast();
 const auth = useAuthStore();
+const roomStore = useRoomStore();
 const websocket = useWebSocketStore();
 
 const props = defineProps<ChatMessageProps>();
@@ -214,14 +217,37 @@ const createDirectMessage = async (
   messageType: MessageType,
 ) => {
   try {
+    const hasText = messageModel.value && messageModel.value?.trim().length > 0;
+
+    if (!hasText) return;
+
     const response = await apiClient.post<ApiResponse>("/room/direct", {
       target_user_id: userId,
       message_type: messageType,
       content: messageModel.value,
     });
 
+    const now = new Date().toISOString();
+
     roomId.value = response.data as string;
+
+    const newMessage: Message = {
+      id: `temp-${Date.now()}`,
+      room_id: roomId.value as string,
+      sender_id: auth.session?.user?.user_id || "",
+      sender_name: auth.session?.user?.username || "",
+      content: messageModel.value as string,
+      message_type: "text",
+      timestamp: now,
+    };
+
+    messages.value = [...messages.value!, newMessage];
+
+    clearAllPending();
     messageModel.value = null;
+
+    roomStore.setUpdated(true, "create");
+    scrollToDown();
   } catch (error) {
     console.error(error);
     toast.add({
@@ -342,7 +368,9 @@ const fetchMessage = async (additionalParams?: string, isLoadMore = false) => {
 
     const response = await apiClient.get<ApiResponse<RoomMessage>>(endpoint);
 
-    const olderMessages = response.data?.messages.reverse() ?? [];
+    const olderMessages = response.data?.messages
+      ? response.data?.messages?.reverse()
+      : [];
 
     nextCursor.value = response.data?.next_cursor;
     hasMore.value = response.data?.has_more ?? false;
@@ -373,6 +401,32 @@ const fetchMessage = async (additionalParams?: string, isLoadMore = false) => {
     loadingMore.value = false;
   }
 };
+
+const fetchRoomDirect = async (userId: string) => {
+  try {
+    const response = await apiClient.get<ApiResponse<CheckDirect>>(
+      `/room/direct/${userId}`,
+    );
+
+    roomId.value = response.data?.id ?? null;
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+// const createDirectMessage = async (userId: string) => {
+//   try {
+//     const response = await apiClient.post<ApiResponse>("/room/direct", {
+//       target_user_id: userId,
+//       message_type: "text",
+//       content: messageModel.value,
+//     });
+
+//     roomId.value = response.data;
+//   } catch (error) {
+//     console.error(error);
+//   }
+// }
 
 const uploadImage = async (room: string, images: File[], content?: string) => {
   try {
@@ -423,12 +477,29 @@ const uploadFiles = async (room: string, files: File[], content?: string) => {
 };
 
 watch(
-  () => props?.idRoom,
-  () => {
-    if (props?.idRoom !== roomId.value) {
-      roomId.value = props.idRoom;
-      fetchMessage();
+  [() => props.idRoom, () => props.idUser],
+  ([newIdRoom, newIdUser], [oldIdRoom, oldIdUser]) => {
+    if (newIdRoom && newIdRoom !== oldIdRoom) {
+      roomId.value = newIdRoom;
     }
+
+    if (newIdUser && newIdUser !== oldIdUser) {
+      fetchRoomDirect(newIdUser);
+    }
+  },
+  {
+    immediate: true,
+  },
+);
+
+watch(
+  () => roomId.value,
+  () => {
+    if (!roomId.value) {
+      messages.value = [];
+    }
+
+    fetchMessage();
   },
   {
     immediate: true,
