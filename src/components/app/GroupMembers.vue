@@ -3,7 +3,7 @@ import apiClient from "@/lib/apiClient";
 import type { ApiResponse } from "@/types/general";
 import type { User } from "@/types/user";
 import { Button, Image } from "primevue";
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import UsersBadge from "./UsersBadge.vue";
 import { Icon } from "@iconify/vue";
 import { useRoomStore } from "@/stores/room.ts";

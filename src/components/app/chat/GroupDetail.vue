@@ -569,7 +569,7 @@ watch(
             v-if="showEditDescription"
             @click="setSaveInput('desc')"
             v-tooltip.bottom="{
-              value: 'Edit group description',
+              value: 'Click to save group description',
               pt: {
                 arrow: {
                   style: {
@@ -590,7 +590,7 @@ watch(
             v-else
             @click="setShowInput('desc')"
             v-tooltip.bottom="{
-              value: 'Click to save group description',
+              value: 'Edit group description',
               pt: {
                 arrow: {
                   style: {
@@ -755,12 +755,13 @@ watch(
             </div>
           </div>
           <div
-            :class="`flex flex-col w-30 transition-all ${member.role === 'admin' ? 'items-start' : 'items-end'}`"
+            :class="`flex flex-col w-fit transition-all ${member.role === 'admin' ? 'items-start' : 'items-end'}`"
           >
-            <div v-if="member.role === 'admin'" class="w-full">
-              <span class="text-xs border rounded px-1.5 py-0.5"
-                >Group Admin</span
-              >
+            <div
+              v-if="member.role === 'admin'"
+              class="w-full rounded-xl bg-primary-light flex items-center"
+            >
+              <span class="text-xs text-neutral-white py-1 px-2">Admin</span>
             </div>
             <span
               v-if="
