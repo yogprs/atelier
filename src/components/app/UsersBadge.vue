@@ -3,7 +3,7 @@ import type { User } from "@/types/user";
 import { Icon } from "@iconify/vue";
 import { Form } from "@primevue/forms";
 import { Button, Image, InputText } from "primevue";
-import { computed, nextTick, ref, watch } from "vue";
+import { nextTick, ref, watch } from "vue";
 
 interface UserBadgeProps {
   data: Pick<User, "id" | "avatar" | "username">[];
