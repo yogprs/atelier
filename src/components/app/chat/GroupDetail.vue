@@ -12,6 +12,7 @@ import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ImageCropper from "@/components/app/ImageCropper.vue";
 import DialogSearchMember from "../DialogSearchMember.vue";
+import DialogAddMember from "../DialogAddMember.vue";
 
 const MENU_WIDTH = 240;
 const MENU_HEIGHT = 180;
@@ -46,6 +47,7 @@ const previewImage = ref<string | null>();
 const showCropper = ref<boolean>(false);
 const cropImage = ref<string>("");
 const showSearchMember = ref<boolean>(false);
+const showDialogAddMember = ref<boolean>(false);
 const visibleMenu = ref<boolean>(false);
 
 const menuPosition = ref({
@@ -200,6 +202,10 @@ const setShowSearchMember = () => {
   showSearchMember.value = true;
 };
 
+const setShowAddMember = () => {
+  showDialogAddMember.value = true;
+};
+
 const handleFileChange = (event: Event) => {
   const input = event.target as HTMLInputElement;
 
@@ -308,12 +314,22 @@ const getUser = async () => {
 
 const removeMemberGroup = async (memberId: string) => {
   try {
-    console.log(memberId);
+    // console.log(memberId);
+    const body = {
+      members: [memberId],
+    };
+
+    await apiClient.del(`/members/${roomStore.roomDetail?.id}/remove`, {
+      body,
+    });
+
+    roomStore.getRoomDetail(roomStore.roomDetail?.id as string);
+    roomStore.setUpdated(true, "update");
   } catch (error) {
     console.error(error);
     toast.add({
       severity: "error",
-      summary: "Failed to leave group.",
+      summary: "Failed to remove members from group.",
     });
   }
 };
@@ -555,6 +571,7 @@ watch(
         </div>
         <p
           v-else
+          @click="setShowInput('desc')"
           :class="`text-sm mb-1 truncate ${!roomStore.roomDetail?.description ? 'cursor-pointer' : 'cursor-default'}`"
         >
           {{
@@ -693,6 +710,7 @@ watch(
 
       <!-- Add participant button -->
       <button
+        @click="setShowAddMember"
         class="px-6 py-3 flex items-center gap-4 cursor-pointer transition-colors hover:bg-neutral-border/50"
       >
         <div class="w-10 h-10 rounded-full flex items-center justify-center">
@@ -834,6 +852,7 @@ watch(
       </p>
     </div>
   </div>
+
   <ImageCropper
     :visible="showCropper"
     :image="cropImage"
@@ -841,8 +860,14 @@ watch(
     @close="showCropper = false"
     @save="uploadAvatar"
   />
+
   <DialogSearchMember
     v-model:visible="showSearchMember"
+    :room-id="roomStore.roomDetail?.id as string"
+  />
+
+  <DialogAddMember
+    v-model:visible="showDialogAddMember"
     :room-id="roomStore.roomDetail?.id as string"
   />
 

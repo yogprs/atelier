@@ -7,6 +7,7 @@ import { nextTick, ref, watch } from "vue";
 
 interface UserBadgeProps {
   data: Pick<User, "id" | "avatar" | "username">[];
+  useSearch: boolean;
 }
 
 const props = defineProps<UserBadgeProps>();
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 
 const selectedUser = ref<string>();
 const scrollMembers = ref<any>(null);
+const showSearch = ref<boolean>(true);
 
 // const users = computed(() => {
 //   return props.data;
@@ -43,6 +45,8 @@ watch(
   () => props.data,
   () => {
     users.value = props.data;
+    if (props.useSearch === null || props.useSearch === undefined) return;
+    showSearch.value = props.useSearch;
   },
   {
     immediate: true,
@@ -62,7 +66,6 @@ watch(
 </script>
 
 <template>
-  {{ console.log(users) }}
   <div
     ref="scrollMembers"
     class="w-full scroll-user overflow-x-hidden overflow-y-auto py-2"
@@ -97,7 +100,7 @@ watch(
           </Button>
         </div>
       </div>
-      <Form class="w-full pb-4">
+      <Form v-if="showSearch" class="w-full pb-4">
         <InputText
           v-model="selectedUser"
           name="user"

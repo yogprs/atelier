@@ -3,7 +3,7 @@ import apiClient from "@/lib/apiClient";
 import type { ApiResponse } from "@/types/general";
 import type { User } from "@/types/user";
 import { Button, Image } from "primevue";
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import UsersBadge from "./UsersBadge.vue";
 import { Icon } from "@iconify/vue";
 import { useRoomStore } from "@/stores/room.ts";
@@ -21,7 +21,6 @@ const roomStore = useRoomStore();
 
 const users = ref<User[]>();
 const selectedUsers = ref<Pick<User, "id" | "avatar" | "username">[]>([]);
-const scrollMembers = ref<any>(null);
 
 const groupedUsers = computed(() => {
   if (!users.value) return {};
@@ -53,22 +52,10 @@ const toggleUser = (user: User) => {
     avatar: user.avatar,
     username: user.username,
   });
-  scrollToDown();
 };
 
 const removeSelectedUser = (id: string) => {
   selectedUsers.value = selectedUsers.value?.filter((user) => user.id !== id);
-};
-
-const scrollToDown = async () => {
-  await nextTick();
-
-  if (!scrollMembers.value) return;
-
-  scrollMembers.value.scrollTo({
-    top: scrollMembers.value.scrollHeight,
-    behavior: "smooth",
-  });
 };
 
 const getUsers = async () => {
@@ -136,7 +123,11 @@ onMounted(async () => {
 <template>
   <div class="px-6 py-5">
     <div class="px-2 pb-2">
-      <UsersBadge @remove="removeSelectedUser" :data="selectedUsers" />
+      <UsersBadge
+        @remove="removeSelectedUser"
+        :data="selectedUsers"
+        :use-search="true"
+      />
     </div>
 
     <div class="px-2 overflow-hidden">
