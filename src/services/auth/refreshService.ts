@@ -1,17 +1,14 @@
 import { appConfig } from "@/config";
 import type { RefreshTokenResponse } from "../../types/general";
 
-/**
- * Base URL for the API.
- * Uses env variable, defaults to '' (same origin).
- */
-const API_BASE_URL = appConfig.API_URL;
+/** Refresh lives at the API origin, outside the /api base used by REST calls. */
+const REFRESH_URL = `${appConfig.API_ORIGIN}/api/users/refresh`;
 
 /**
  * Call the backend's refresh endpoint to get a new access token.
  *
- * Backend endpoint: POST /api/users/refresh
- * Request body: { refresh_token: "..." }
+ * Backend endpoint: GET /api/users/refresh
+ * Authorization: Bearer <refresh_token>
  * Response body: { token: "...", refresh_token: "..." }
  *
  * Uses raw fetch instead of apiClient to avoid circular dependency
@@ -21,12 +18,12 @@ export async function refreshAccessToken(
   refreshToken: string,
 ): Promise<{ accessToken: string; refreshToken: string } | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/users/refresh`, {
-      method: "POST",
+    const response = await fetch(REFRESH_URL, {
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${refreshToken}`,
       },
-      body: JSON.stringify({ refresh_token: refreshToken }),
     });
 
     if (!response.ok) {

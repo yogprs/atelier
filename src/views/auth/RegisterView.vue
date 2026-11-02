@@ -15,8 +15,8 @@ import { reactive, ref } from "vue";
 import { zodResolver } from "@primevue/forms/resolvers/zod";
 import z from "zod";
 import { Icon } from "@iconify/vue";
-import { handleAuthWithProvider } from "@/services/oauth/oauthService";
-import apiClient from "@/lib/apiClient";
+import { startOAuth } from "@/services/oauth/oauthService";
+import apiClient, { ApiError } from "@/lib/apiClient";
 import type { BodyRegister, RegisterResponse } from "@/types/auth";
 import { useRouter } from "vue-router";
 
@@ -58,7 +58,9 @@ const onFormSubmit = async ({ valid, values }: FormSubmitEvent) => {
 
 const handleRegister = async (values: BodyRegister) => {
   try {
-    await apiClient.post<RegisterResponse>("/users/register", values);
+    await apiClient.post<RegisterResponse>("/users/register", values, {
+      skipAuth: true,
+    });
 
     toast.add({
       severity: "success",
@@ -68,22 +70,43 @@ const handleRegister = async (values: BodyRegister) => {
     });
 
     router.replace("/auth/login");
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
+
+    let summary = "Registrasi gagal. Coba lagi.";
+    if (e instanceof ApiError) {
+      if (
+        e.status === 500 &&
+        /already registered/i.test(e.message)
+      ) {
+        summary = "Email sudah terdaftar. Silakan login.";
+      } else if (e.status === 429) {
+        const retryAfter = (e.body as { retry_after?: number } | null)
+          ?.retry_after;
+        summary = retryAfter
+          ? `Terlalu banyak percobaan. Coba lagi dalam ${retryAfter} detik.`
+          : "Terlalu banyak percobaan. Coba lagi sebentar.";
+      } else {
+        summary = e.message;
+      }
+    } else if (e instanceof Error) {
+      summary = e.message;
+    }
+
     toast.add({
       severity: "error",
-      summary: e?.message ?? "Unknown Error",
+      summary,
       life: 3000,
     });
   }
 };
 
 const loginGithub = (): void => {
-  handleAuthWithProvider("github");
+  startOAuth("github");
 };
 
 const loginGoogle = (): void => {
-  handleAuthWithProvider("google");
+  startOAuth("google");
 };
 </script>
 

@@ -12,9 +12,7 @@ gsap.ticker.lagSmoothing(0);
 
 onMounted(async () => {
   await auth.init();
-});
 
-onMounted(() => {
   if (auth.accessToken) {
     websocket.connect();
   }

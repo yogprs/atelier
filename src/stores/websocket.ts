@@ -7,9 +7,10 @@ import type {
   WsIncomingMessage,
 } from "@/types/websocket";
 
-const WS_BASE_URL = appConfig.API_URL.replace("https://", "wss://")
-  .replace("http://", "ws://")
-  .replace("/api", "");
+const WS_BASE_URL = appConfig.API_ORIGIN.replace(/^https:/, "wss:").replace(
+  /^http:/,
+  "ws:",
+);
 
 export const useWebSocketStore = defineStore("websocket", {
   state: (): WebSocketState => ({
