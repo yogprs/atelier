@@ -15,8 +15,8 @@ import { reactive, ref } from "vue";
 import { zodResolver } from "@primevue/forms/resolvers/zod";
 import z from "zod";
 import { Icon } from "@iconify/vue";
-import { handleAuthWithProvider } from "@/services/oauth/oauthService";
-import apiClient from "@/lib/apiClient";
+import { startOAuth } from "@/services/oauth/oauthService";
+import apiClient, { ApiError } from "@/lib/apiClient";
 import type { BodyLogin, LoginResponse } from "@/types/auth";
 import { useAuthStore } from "@/stores/auth";
 import { useRouter } from "vue-router";
@@ -44,7 +44,7 @@ const resolver = ref(
         }),
       password: z
         .string()
-        .min(3, { message: "Minimum 8 characters." })
+        .min(8, { message: "Minimum 8 characters." })
         .max(30, { message: "Maximum 30 characters." }),
       // .refine((value) => /[a-z]/.test(value), {
       //   message: "Must have a lowercase letter.",
@@ -82,6 +82,7 @@ const handleLogin = async (values: BodyLogin) => {
     const response = await apiClient.post<LoginResponse>(
       "/users/login",
       values,
+      { skipAuth: true },
     );
 
     if (!response?.token) {
@@ -90,6 +91,7 @@ const handleLogin = async (values: BodyLogin) => {
         summary: "Login Failed",
         life: 3000,
       });
+      return;
     }
 
     toast.add({
@@ -104,22 +106,40 @@ const handleLogin = async (values: BodyLogin) => {
     websocket.connect();
 
     router.replace("/app/chats");
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
+
+    let summary = "Login gagal. Coba lagi.";
+    if (e instanceof ApiError) {
+      if (e.status === 401) {
+        summary = "Email atau password salah.";
+      } else if (e.status === 429) {
+        const retryAfter = (e.body as { retry_after?: number } | null)
+          ?.retry_after;
+        summary = retryAfter
+          ? `Terlalu banyak percobaan. Coba lagi dalam ${retryAfter} detik.`
+          : "Terlalu banyak percobaan. Coba lagi sebentar.";
+      } else {
+        summary = e.message;
+      }
+    } else if (e instanceof Error) {
+      summary = e.message;
+    }
+
     toast.add({
       severity: "error",
-      summary: e?.message ?? "Unknown Error",
+      summary,
       life: 3000,
     });
   }
 };
 
 const loginGithub = (): void => {
-  handleAuthWithProvider("github");
+  startOAuth("github");
 };
 
 const loginGoogle = (): void => {
-  handleAuthWithProvider("google");
+  startOAuth("google");
 };
 </script>
 
