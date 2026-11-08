@@ -1,0 +1,16 @@
+.git
+.github
+.playwright-mcp
+node_modules
+dist
+dist-ssr
+docs
+deploy
+coverage
+.env
+.env.*
+*.local
+*.log
+.vscode
+.idea
+README.md

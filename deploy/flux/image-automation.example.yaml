@@ -1,0 +1,82 @@
+# Template for the Flux config repository. Copy this file next to the
+# GitRepository/Kustomization for the cluster and adjust names and paths.
+# If the cluster serves image.toolkit.fluxcd.io/v1beta2 instead of v1,
+# update apiVersion on these resources. Remove policyChangeDelay on older
+# image-automation-controller versions that do not support it.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: atelier
+  namespace: flux-system
+spec:
+  image: ghcr.io/yogprs/atelier
+  interval: 5m
+  provider: generic
+  # Remove this when the GHCR package is public.
+  secretRef:
+    name: ghcr-read
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: atelier
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: atelier
+  filterTags:
+    pattern: '^main-[0-9]{14}-[0-9a-f]{40}$'
+  policy:
+    alphabetical:
+      order: asc
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: atelier
+  namespace: flux-system
+spec:
+  interval: 5m
+  policyChangeDelay: 2m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        name: fluxcdbot
+        email: fluxcdbot@users.noreply.github.com
+      messageTemplate: |
+        chore(atelier): update image
+
+        {{ .Changed.Summary }}
+    push:
+      branch: main
+  update:
+    strategy: Setters
+    path: ./apps/prod/atelier
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: atelier
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 3m
+  path: ./apps/prod/atelier
+  prune: true
+  wait: true
+  targetNamespace: atelier
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: atelier
+      namespace: atelier
