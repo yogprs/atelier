@@ -1,126 +1,69 @@
-# Deployment dan FluxCD
+# Deployment
 
-Repo ini membangun image frontend dan mendorongnya ke GHCR. FluxCD membaca tag
-image dari GHCR, menulis tag baru ke repo konfigurasi Flux, lalu Kubernetes
-menerapkan Deployment.
+Manifest produksi Atelier sekarang berada di repo **`k3s-opt`**. Repo Atelier hanya
+membangun source, image GHCR, dan menjaga kontrak runtime image.
 
-Pemisahan yang disarankan:
+Sumber kebenaran deployment:
 
-| Repo | Tanggung jawab |
-| --- | --- |
-| `atelier` (repo ini) | Source, Dockerfile, GitHub Actions, image GHCR, SBOM/provenance |
-| repo Flux config, misalnya `flux-config` | `ImageRepository`, `ImagePolicy`, `ImageUpdateAutomation`, Kustomization, Deployment, Service, Ingress, secret |
-
-Untuk satu VPS, Deployment boleh disalin ke repo Flux config. Jika tim web ingin
-mengelola probe dan env, `deploy/k8s` dapat dijadikan base, tetapi image automation
-harus menulis hanya ke satu lokasi (repo Flux config).
-
-## Image dan tag
-
-Image: `ghcr.io/yogprs/atelier`.
-
-Workflow membangun image pada push `main` dan tag `v*.*.*`.
-
-- push `main`: `sha-<full>`, `main`, dan `main-YYYYMMDDHHmmss-<sha>`
-- tag `v1.2.3`: `sha-<full>`, `1.2.3`, `1.2`, `latest`
-
-Flux sebaiknya mengikuti tag immutable `main-YYYYMMDDHHmmss-<sha>`. Jangan memakai
-`latest` atau tag `main` yang mutable untuk `ImagePolicy`, karena nama tag tidak
-berubah saat image diperbarui.
-
-## Konfigurasi build
-
-Frontend memakai build-time env:
-
-- `VITE_API_BASE_URL=https://madgo.my.id`
-- `VITE_API_ORIGIN=https://madgo.my.id` (origin host, tanpa `/api`)
-
-Nilai ini masuk ke bundle JavaScript, bukan secret. Atur sebagai repository
-variables `VITE_API_BASE_URL` dan `VITE_API_ORIGIN`; workflow memakai nilai
-production sebagai fallback. Perubahan API memerlukan build image baru.
-
-## GHCR
-
-Workflow publish memakai `GITHUB_TOKEN` dengan `packages: write` dan menulis ke
-namespace repo upstream `ghcr.io/yogprs/atelier`. Package baru biasanya private.
-
-Jika package private, Flux dan kubelet memerlukan kredensial read-only terpisah:
-
-```bash
-kubectl -n flux-system create secret docker-registry ghcr-read \
-  --docker-server=ghcr.io \
-  --docker-username=<github-user> \
-  --docker-password="$GHCR_READ_TOKEN"
-
-kubectl -n atelier create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io \
-  --docker-username=<github-user> \
-  --docker-password="$GHCR_READ_TOKEN"
+```text
+k3s-opt/apps/base/atelier/
+k3s-opt/apps/production/atelier/
+k3s-opt/apps/production/kustomization.yaml
 ```
 
-Token `GHCR_READ_TOKEN` cukup `read:packages`. Untuk `ImageRepository`, tambahkan
-`secretRef` ke `ghcr-read`; untuk Pod, `imagePullSecrets` ke `ghcr-pull`. Jika
-package dibuat public, keduanya bisa dihapus.
+`deploy/k8s` dan `deploy/flux` sudah dipindahkan dari repo ini. Jangan menambahkan
+manifest cluster baru di sini dan jangan menjalankan `kubectl apply` dari CI aplikasi.
 
-## Flux
+## Image
 
-File `deploy/flux/image-automation.example.yaml` adalah template untuk repo Flux
-config. Salin ke repo tersebut, lalu sesuaikan:
+- Registry: `ghcr.io/yogprs/atelier`
+- Platform: `linux/amd64`
+- Tag immutable terakhir: `main-20261108164420-f36f3b1`
+- Digest terakhir:
+  `sha256:53b7ca190ddb257cd248dcc577da8473896bb0d273e4c193f7e4ff29681f6088`
+- Package saat ini public; `imagePullSecret` tidak diperlukan.
 
-- nama `GitRepository` (`flux-system`);
-- path overlay, misalnya `./apps/prod/atelier`;
-- namespace `atelier`;
-- apakah Flux commit langsung ke `main` atau ke branch review.
+Jangan memakai `latest` atau `main` sebagai tag deployment. Gunakan digest atau tag
+`main-YYYYMMDDHHmmss-<sha>`.
 
-Contoh setter di `deploy/k8s/kustomization.yaml`:
+## Kontrak runtime
 
-```yaml
-images:
-  - name: ghcr.io/yogprs/atelier
-    newTag: "0.0.0" # {"$imagepolicy": "flux-system:atelier:tag"}
+- Port container `8080`, nama port `http`.
+- Liveness dan readiness memakai `GET /healthz`.
+- Berjalan sebagai UID/GID `101:101`.
+- Hanya `/tmp` yang writable; aman dengan `readOnlyRootFilesystem: true` dan emptyDir
+  `/tmp` berukuran 16Mi.
+- `StopSignal=SIGQUIT`; stop normal di bawah 1 detik, target maksimum 30 detik.
+- Stateless, tanpa PVC, tanpa metrics/version endpoint.
+- Requests `50m` CPU / `64Mi` memory; limits `250m` CPU / `128Mi` memory.
+
+## Build-time env
+
+Nilai berikut ditanamkan saat build dan bukan secret:
+
+```text
+VITE_API_BASE_URL=https://madgo.my.id
+VITE_API_ORIGIN=https://madgo.my.id
+VITE_DEFAULT_TIMEOUT=15000
 ```
 
-`ImageUpdateAutomation` mengganti nilai `newTag` ketika `ImagePolicy` memilih tag
-baru. Jangan menaruh setter di base dan overlay sekaligus. Jalankan Flux dengan
-polling GHCR; webhook tidak wajib untuk VPS.
+Jika API pindah domain, image harus dibangun ulang dan digest baru dipakai.
 
-Perintah pemeriksaan:
+## CI
 
-```bash
-flux get image repository atelier -n flux-system
-flux get image policy atelier -n flux-system
-flux get image update atelier -n flux-system
-flux get kustomization atelier -n flux-system
-flux reconcile image repository atelier -n flux-system
-flux reconcile image update atelier -n flux-system
-flux reconcile kustomization atelier --with-source -n flux-system
-```
+`.github/workflows/ci.yml` menjalankan:
 
-## Manifest Kubernetes
+- quality: `pnpm install --frozen-lockfile` dan `pnpm build`;
+- docker-build pada PR: build image tanpa push dan smoke test SPA/health;
+- publish pada `main`/tag: push ke GHCR dengan provenance dan SBOM.
 
-`deploy/k8s` berisi namespace, Deployment, Service, Ingress, dan Kustomization.
+Branch `main` harus dilindungi dan PR wajib melewati quality serta docker-build.
+Workflow publish dibatasi ke `github.repository == 'yogprs/atelier'`.
 
-Nilai yang perlu disesuaikan sebelum apply:
+## GHCR private
 
-- `imagePullSecrets: ghcr-pull` (hapus jika package public);
-- `ingressClassName: nginx` (sesuaikan dengan ingress controller VPS);
-- host `atelier.web.id` dan `tls.secretName`;
-- annotation cert-manager jika memakai cert-manager;
-- replica dan resource limit.
+Jika package diubah menjadi private, sediakan token read-only dengan nama variabel
+`GHCR_READ_TOKEN` dan scope `read:packages` melalui saluran aman. Secret image pull
+dibuat di `k3s-opt` dengan SOPS sebagai `ghcr-pull`; jangan menaruh nilainya di repo ini.
 
-Ingress belum mengatur API proxy. Frontend memanggil API `madgo.my.id` secara
-cross-origin; backend harus mengizinkan origin `https://atelier.web.id`, dan
-WebSocket harus mengizinkan origin yang sama. Jika nanti API diproksikan melalui
-domain frontend, tambahkan location `/api/` dan `/ws` di nginx, termasuk header
-Upgrade dan redaksi token pada access log.
-
-## Checklist sebelum publish
-
-- [ ] Actions mengizinkan workflow menulis package (`packages: write`).
-- [ ] Repository variables `VITE_API_BASE_URL` dan `VITE_API_ORIGIN` diisi.
-- [ ] `main` dilindungi dan PR wajib melewati quality serta docker-build.
-- [ ] Tag `v*.*.*` dilindungi untuk rilis.
-- [ ] Package GHCR private/public diputuskan.
-- [ ] `ghcr-read` dan `ghcr-pull` dibuat jika private.
-- [ ] `main-*` dipakai sebagai policy Flux, bukan `latest`.
-- [ ] Flux config memakai repo terpisah dan credential Git untuk push.
+Detail handoff dan bukti runtime ada di `k3s-opt/handoff/atelier/REPLY.md`.

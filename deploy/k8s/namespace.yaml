@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: atelier
-  labels:
-    app.kubernetes.io/name: atelier
