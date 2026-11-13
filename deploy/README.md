@@ -1,51 +1,40 @@
 # Deployment
 
-Manifest produksi Atelier disimpan di repo ini pada `deploy/k8s`. Repo
-`k3s-opt` hanya menyimpan policy cluster dan Flux `GitRepository` yang menunjuk
-ke repository ini.
-
-## Alur deploy
+Repo Atelier hanya membangun dan mempublikasikan image. Manifest produksi dan
+Flux Image Automation berada di repo **`k3s-opt`**:
 
 ```text
-push/merge main
-  -> GitHub Actions quality + docker-build
-  -> publish image immutable ke GHCR
-  -> deploy job update tag di deploy/k8s/kustomization.yaml
-  -> commit ke main dengan [skip ci]
-  -> Flux menarik repo atelier path ./deploy/k8s
-  -> Flux menerapkan Deployment/Service/Ingress
+k3s-opt/apps/base/atelier/
+k3s-opt/apps/production/atelier/
+k3s-opt/clusters/production/atelier.yaml
 ```
 
-Tidak ada commit image ke `k3s-opt`. `k3s-opt` hanya berisi namespace, PSA,
-NetworkPolicy global, quota, cert-manager, dan pointer Flux.
+## Alur rilis
 
-## Image
+```text
+push/merge main Atelier
+  -> GitHub Actions quality + docker-build
+  -> publish image immutable main-YYYYMMDDHHmmss-<sha> ke GHCR
+  -> Flux ImageRepository mendeteksi tag baru
+  -> ImagePolicy memilih tag tertinggi
+  -> ImageUpdateAutomation menulis tag ke k3s-opt
+  -> Flux Kustomization menerapkan apps/production
+```
+
+Tidak ada job deploy atau commit bot di repo Atelier. Deploy dilakukan oleh Flux
+di cluster; tag image ditulis ke `k3s-opt`, bukan ke repo ini.
+
+## Aturan image
 
 - Registry: `ghcr.io/yogprs/atelier`
 - Platform: `linux/amd64`
-- Tag deployment: immutable `main-YYYYMMDDHHmmss-<sha>`
-- Package public; `imagePullSecret` tidak diperlukan
+- Tag: `main-YYYYMMDDHHmmss-<sha>`; package public
+- Jangan memakai `latest` atau `main` sebagai tag deployment.
+- Port `8080` (`http`), probe `/healthz`, UID/GID `101:101`, read-only root,
+  `/tmp` emptyDir 16Mi, resource `50m/64Mi` request dan `250m/128Mi` limit.
 
-Jangan memakai `latest` atau `main` sebagai tag deployment.
+## CI
 
-## Kontrak runtime
-
-- Port container `8080`, nama port `http`.
-- Liveness/readiness `GET /healthz`.
-- UID/GID `101:101`; non-root.
-- `readOnlyRootFilesystem: true`, hanya `/tmp` writable (emptyDir 16Mi).
-- `StopSignal=SIGQUIT`; stop normal di bawah 1 detik, target maksimum 30 detik.
-- Stateless, tanpa PVC.
-- Request `50m` CPU / `64Mi`; limit `250m` CPU / `128Mi`.
-
-## GHCR private
-
-Jika package diubah private, sediakan token read-only melalui saluran aman dan
-buat `imagePullSecret` di repo `k3s-opt` dengan SOPS. Jangan menaruh token di
-repo ini.
-
-## Catatan
-
-- Jangan menjalankan `kubectl apply` dari CI aplikasi.
-- Perubahan manifest produksi dilakukan lewat PR ke repo ini.
-- `k3s-opt` tetap menjadi pemilik policy namespace dan jaringan.
+Workflow hanya quality, build, dry smoke test pada PR, dan publish GHCR pada
+main/tag. Jika package diubah private, sediakan token read-only lewat saluran
+aman untuk Secret Flux di `k3s-opt`.
